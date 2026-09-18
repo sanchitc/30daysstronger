@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { PLAN, getDay, countExercises } from "./plan.js";
+import { PLAN, TOTAL_DAYS, getDay, countExercises, countDone } from "./plan.js";
 import { Confetti, playApplause } from "./Celebrate.jsx";
 import ExerciseSheet from "./ExerciseSheet.jsx";
 import Builder from "./Builder.jsx";
+import ProgressGrid from "./ProgressGrid.jsx";
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
 
@@ -22,7 +23,7 @@ function todayKey() {
 // Day 1 is the day you first opened the app; it never runs past the plan.
 function dayFromStart(startDate) {
   const diff = Math.floor((new Date(todayKey()) - new Date(startDate)) / 86400000) + 1;
-  return Math.min(Math.max(diff, 1), PLAN.length || 1);
+  return Math.min(Math.max(diff, 1), TOTAL_DAYS);
 }
 
 // ─── Rest timer ──────────────────────────────────────────────────────────────
@@ -54,6 +55,16 @@ function RestTimer({ seconds, onDone }) {
   );
 }
 
+// A block's heading: its own label if it has one, otherwise the rounds it runs.
+function blockHeading(block) {
+  const rounds =
+    block.rounds > 1
+      ? `${block.rounds} ROUNDS${block.rest ? ` · ${block.rest} SEC REST` : ""}`
+      : "";
+  if (block.label) return rounds ? `${block.label} · ${rounds}` : block.label;
+  return rounds || "WARM UP";
+}
+
 // ─── App ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -64,6 +75,7 @@ export default function App() {
   });
   const [sheetItem, setSheetItem] = useState(null);
   const [building, setBuilding] = useState(false);
+  const [showGrid, setShowGrid] = useState(false);
   const [rest, setRest] = useState(null);
   const [celebrate, setCelebrate] = useState(false);
   const wasComplete = useRef(false);
@@ -82,12 +94,7 @@ export default function App() {
   const total = countExercises(workout);
   // Count only boxes that exist in the workout as it stands now — editing a day
   // shouldn't leave it looking finished.
-  const doneCount = workout
-    ? workout.blocks.reduce(
-        (n, b, bi) => n + b.exercises.filter((_, ei) => done[`${bi}:${ei}`]).length,
-        0
-      )
-    : 0;
+  const doneCount = countDone(workout, done);
   const complete = total > 0 && doneCount >= total;
 
   // Celebrate the moment the last box is ticked — but not on reload.
@@ -126,8 +133,23 @@ export default function App() {
     persist({ ...data, custom });
   };
 
-  const maxDay = Math.max(PLAN.length, ...Object.keys(data.custom || {}).map(Number), 1);
   const isCustom = Boolean(data.custom?.[dayNumber]);
+
+  // Every day, summarised for the 30-day map.
+  const dayStats = PLAN.map((planDay) => {
+    const n = planDay.day;
+    const w = data.custom?.[n] || planDay;
+    const t = countExercises(w);
+    const d = countDone(w, data.progress?.[n]);
+    const status = t === 0 ? "empty" : d >= t ? "complete" : d > 0 ? "started" : "ready";
+    return { day: n, total: t, done: d, status };
+  });
+
+  // Consecutive finished days ending at today (or at yesterday, if today is
+  // still in progress).
+  const isDone = (n) => dayStats[n - 1]?.status === "complete";
+  let streak = 0;
+  for (let n = isDone(dayNumber) ? dayNumber : dayNumber - 1; n >= 1 && isDone(n); n--) streak++;
 
   const blankDay = { day: dayNumber, title: `Day ${dayNumber}`, focus: "", blocks: [] };
 
@@ -142,18 +164,21 @@ export default function App() {
               className="day-arrow"
               onClick={() => setDayNumber((d) => d - 1)}
               disabled={dayNumber <= 1}
+              aria-label="Previous day"
             >‹</button>
-            <span className="day-label">
-              DAY {dayNumber} <span className="of">/ {maxDay}</span>
-            </span>
+            <button className="day-label" onClick={() => setShowGrid(true)}>
+              DAY {dayNumber} <span className="of">/ {TOTAL_DAYS}</span>
+              <span className="day-caret">▾</span>
+            </button>
             <button
               className="day-arrow"
               onClick={() => setDayNumber((d) => d + 1)}
-              disabled={dayNumber >= maxDay}
+              disabled={dayNumber >= TOTAL_DAYS}
+              aria-label="Next day"
             >›</button>
           </div>
           <button className="build-btn" onClick={() => setBuilding(true)}>
-            {workout ? "EDIT" : "BUILD"}
+            {total === 0 ? "BUILD" : "EDIT"}
           </button>
         </div>
 
@@ -168,22 +193,22 @@ export default function App() {
             <span className="progress-count">{doneCount}/{total}</span>
           </div>
         )}
+        {streak > 1 && <p className="streak-line">🔥 {streak} days in a row</p>}
       </header>
 
-      {!workout || workout.blocks.length === 0 ? (
+      {total === 0 && (
         <p className="empty">
-          Nothing planned for day {dayNumber} yet.<br />
-          Hit <strong>Build</strong> to pick exercises from the database, or add the day to{" "}
-          <code>plan.js</code>.
+          Day {dayNumber} isn't programmed yet.<br />
+          Hit <strong>BUILD</strong> to pick exercises from the database.
         </p>
-      ) : (
+      )}
+
+      {workout &&
         workout.blocks.map((block, bi) => (
           <section className="block" key={bi}>
             <div className="block-head">
               <span className="block-rounds">
-                {block.rounds > 1
-                  ? `${block.rounds} ROUNDS${block.rest ? ` · ${block.rest} SEC REST` : ""}`
-                  : "WARM UP"}
+                {blockHeading(block)}
               </span>
               {block.rest > 0 && (
                 <button className="rest-btn" onClick={() => setRest({ seconds: block.rest, id: Date.now() })}>
@@ -214,9 +239,12 @@ export default function App() {
                 </div>
               );
             })}
+
+            {block.exercises.length === 0 && (
+              <p className="block-empty">No exercises yet</p>
+            )}
           </section>
-        ))
-      )}
+        ))}
 
       {total > 0 && (
         <div className="footer">
@@ -235,6 +263,15 @@ export default function App() {
         </div>
       )}
 
+      {showGrid && (
+        <ProgressGrid
+          days={dayStats}
+          current={dayNumber}
+          streak={streak}
+          onPick={(n) => { setDayNumber(n); setShowGrid(false); }}
+          onClose={() => setShowGrid(false)}
+        />
+      )}
       {rest && <RestTimer key={rest.id} seconds={rest.seconds} onDone={() => setRest(null)} />}
       {sheetItem && <ExerciseSheet item={sheetItem} onClose={() => setSheetItem(null)} />}
       {building && (

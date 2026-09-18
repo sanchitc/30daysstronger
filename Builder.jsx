@@ -1,7 +1,7 @@
 import { useState } from "react";
 import ExercisePicker from "./ExercisePicker.jsx";
 
-const emptyBlock = () => ({ rounds: 3, rest: 60, exercises: [] });
+const emptyBlock = () => ({ label: null, rounds: 3, rest: 75, exercises: [] });
 
 // Pretty-print a day so it can be pasted straight into plan.js.
 export function toPlanJson(workout) {
@@ -14,6 +14,7 @@ export function toPlanJson(workout) {
   lines.push("    blocks: [");
   for (const b of workout.blocks) {
     lines.push("      {");
+    lines.push(`        label: ${q(b.label)},`);
     lines.push(`        rounds: ${b.rounds || 1},`);
     lines.push(`        rest: ${b.rest ? b.rest : "null"},`);
     lines.push("        exercises: [");
@@ -65,7 +66,7 @@ export default function Builder({ workout, onSave, onCancel }) {
     <div className="builder">
       <div className="sheet-head">
         <div className="sheet-title">Build Day {draft.day}</div>
-        <button className="sheet-close" onClick={onCancel}>×</button>
+        <button className="sheet-close" onClick={onCancel} aria-label="Close">×</button>
       </div>
 
       <div className="builder-body">
@@ -115,6 +116,15 @@ export default function Builder({ workout, onSave, onCancel }) {
               <button className="b-del" onClick={() => removeBlock(bi)}>Remove block</button>
             </div>
 
+            <div className="b-ex-row" style={{ marginTop: 10 }}>
+              <input
+                className="b-input"
+                placeholder="Section name (optional) — e.g. Warm Up"
+                value={block.label || ""}
+                onChange={(e) => setBlock(bi, "label", e.target.value || null)}
+              />
+            </div>
+
             {block.exercises.map((ex, ei) => (
               <div className="b-ex" key={ei}>
                 <div className="b-ex-row">
@@ -129,7 +139,7 @@ export default function Builder({ workout, onSave, onCancel }) {
                     value={ex.reps || ""}
                     onChange={(e) => setEx(bi, ei, "reps", e.target.value)}
                   />
-                  <button className="b-del" onClick={() => removeEx(bi, ei)}>✕</button>
+                  <button className="b-del icon" onClick={() => removeEx(bi, ei)} aria-label="Remove exercise">✕</button>
                 </div>
                 <div className="b-ex-row">
                   <input

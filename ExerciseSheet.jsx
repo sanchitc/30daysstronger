@@ -24,7 +24,7 @@ export default function ExerciseSheet({ item, onClose }) {
             <div className="sheet-title">{item.name}</div>
             {item.reps && <div className="ex-note">{item.reps} reps</div>}
           </div>
-          <button className="sheet-close" onClick={onClose}>×</button>
+          <button className="sheet-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
         <div className="sheet-body">

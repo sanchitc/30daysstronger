@@ -1,12 +1,17 @@
 // ─── The Plan ────────────────────────────────────────────────────────────────
 //
-// One entry per training day. Add a new object to add a day — nothing else in
-// the app needs to change.
+// All 30 days exist from the start. A day you haven't programmed yet comes out
+// of TEMPLATE below — a warm up plus four 3-round blocks, no exercises — so you
+// can fill it in from the app's builder whenever you like.
 //
-//   day       number, 1-based
+// To pin a day down in code, add it to DEFINED and it replaces the template for
+// that day number. Shape of a day:
+//
+//   day       number, 1-30
 //   title     short name shown in the header
 //   focus     optional one-liner under the title
 //   blocks    ordered list of blocks. Each block is:
+//               label      optional section name ("Warm Up", "Finisher")
 //               rounds     how many times through (1 = straight set)
 //               rest       seconds of rest between rounds (null = none shown)
 //               exercises  [{ name, id, reps, note }]
@@ -16,16 +21,38 @@
 //                            reps  free text — "15", "15 (Each Arm)", "30 sec"
 //                            note  optional small grey line under the name
 //
-// Tip: hit "Build" in the app to assemble a day by searching the exercise
-// database, then use "Copy JSON" and paste the result here.
+// Tip: hit "EDIT" in the app to assemble a day by searching the exercise
+// database, then use "Copy JSON" and paste the result into DEFINED below.
 
-export const PLAN = [
+export const TOTAL_DAYS = 30;
+
+// The empty scaffold every unprogrammed day starts from.
+function template(day) {
+  return {
+    day,
+    title: `Day ${day}`,
+    focus: null,
+    blocks: [
+      { label: "Warm Up", rounds: 1, rest: null, exercises: [] },
+      { label: null, rounds: 3, rest: 75, exercises: [] },
+      { label: null, rounds: 3, rest: 75, exercises: [] },
+      { label: null, rounds: 3, rest: 75, exercises: [] },
+      { label: null, rounds: 3, rest: 75, exercises: [] },
+    ],
+  };
+}
+
+// ─── Days you've programmed ──────────────────────────────────────────────────
+// Paste new days here. Anything not listed falls back to the template above.
+
+const DEFINED = [
   {
     day: 1,
     title: "Legs & Arms",
     focus: "Dumbbell circuits — 3 rounds each, 60s rest",
     blocks: [
       {
+        label: "Warm Up",
         rounds: 1,
         rest: null,
         exercises: [
@@ -33,6 +60,7 @@ export const PLAN = [
         ],
       },
       {
+        label: null,
         rounds: 3,
         rest: 60,
         exercises: [
@@ -41,6 +69,7 @@ export const PLAN = [
         ],
       },
       {
+        label: null,
         rounds: 3,
         rest: 60,
         exercises: [
@@ -49,6 +78,7 @@ export const PLAN = [
         ],
       },
       {
+        label: null,
         rounds: 3,
         rest: 60,
         exercises: [
@@ -57,6 +87,7 @@ export const PLAN = [
         ],
       },
       {
+        label: null,
         rounds: 3,
         rest: 60,
         exercises: [
@@ -73,6 +104,11 @@ export const PLAN = [
   },
 ];
 
+export const PLAN = Array.from({ length: TOTAL_DAYS }, (_, i) => {
+  const day = i + 1;
+  return DEFINED.find((d) => d.day === day) || template(day);
+});
+
 export function getDay(dayNumber) {
   return PLAN.find((d) => d.day === dayNumber) || null;
 }
@@ -80,4 +116,13 @@ export function getDay(dayNumber) {
 export function countExercises(workout) {
   if (!workout) return 0;
   return workout.blocks.reduce((n, b) => n + b.exercises.length, 0);
+}
+
+// How many of a day's boxes are ticked, counting only boxes that still exist.
+export function countDone(workout, done) {
+  if (!workout || !done) return 0;
+  return workout.blocks.reduce(
+    (n, b, bi) => n + b.exercises.filter((_, ei) => done[`${bi}:${ei}`]).length,
+    0
+  );
 }

@@ -28,7 +28,7 @@ export default function ExercisePicker({ onPick, onClose }) {
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <div className="sheet-title">Add exercise</div>
-          <button className="sheet-close" onClick={onClose}>×</button>
+          <button className="sheet-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
         <div style={{ padding: "14px 18px 0" }}>
