@@ -20,6 +20,37 @@ A dead-simple daily training tracker. One day, one workout, one checklist.
   what's done, what's half-finished, which days still need exercises — plus your
   current streak. Tap any day to jump to it.
 
+## Accounts & sync
+
+Sign in with Google (via [Supabase Auth](https://supabase.com/docs/guides/auth/social-login/auth-google))
+and your progress follows you to any device. Or tap **Continue without an account** and
+everything stays in this browser, exactly as before. Signing in later carries that progress
+into the account.
+
+Two tables in the Supabase project hold it, both locked to their owner with row-level security:
+
+| Table | One row per | Holds |
+| --- | --- | --- |
+| `challenges` | user | `start_date` — the day your 30 days began |
+| `day_progress` | user × day | `done` (ticked boxes), `custom` (a day you built in the app) |
+
+`supabase.js` has the project URL and publishable key built in. That key is designed to be
+public, and row-level security is what protects the data. Set `VITE_SUPABASE_URL` /
+`VITE_SUPABASE_PUBLISHABLE_KEY` to point at a different project.
+
+**One-time setup for Google sign-in** (Supabase dashboard):
+
+1. Google Cloud Console → *APIs & Services → Credentials* → create an **OAuth client ID**
+   (Web application). Authorized redirect URI:
+   `https://timoqfdzinioppmgxefz.supabase.co/auth/v1/callback`
+2. Supabase → *Authentication → Sign In / Providers → Google*: enable it and paste the client
+   ID and secret.
+3. Supabase → *Authentication → URL Configuration*: **Site URL**
+   `https://30daysstronger.vercel.app`, and add `http://localhost:5173` to the redirect URLs
+   for local development.
+
+Until Google is enabled, the app skips the sign-in screen and works offline as before.
+
 ## The plan
 
 All 30 days are programmed in `plan.js`: four weeks of dumbbell, barbell, cable and
@@ -77,6 +108,8 @@ into the file so it's shared across devices and doesn't live only in one browser
 | `ExercisePicker.jsx` | Search/filter over the exercise database |
 | `ExerciseSheet.jsx` | Per-exercise how-to (images + instructions) |
 | `exercises.js` | Database loader, search, image URLs |
+| `supabase.js` | Supabase client, Google sign-in, progress sync |
+| `Auth.jsx` | Sign-in screen and the account bar |
 | `public/exercises.json` | The 876-exercise database, fetched on demand |
 
 ## Run it

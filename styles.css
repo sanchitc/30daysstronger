@@ -499,3 +499,69 @@ button { cursor: pointer; border: none; background: none; }
 .sw.is-started { background: var(--surface2); border: 1px solid var(--orange); }
 .sw.is-ready { background: var(--surface2); }
 .sw.is-empty { border: 1px dashed var(--line); }
+
+/* ─── Account ────────────────────────────────────────────────────────────── */
+
+.signin {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 72px 24px 40px;
+}
+.signin-kicker { color: var(--red); font-size: 13px; font-weight: 600; letter-spacing: 4px; }
+.signin-title {
+  font-family: 'Bebas Neue', 'DM Sans', sans-serif;
+  font-size: clamp(56px, 18vw, 96px);
+  line-height: 0.9;
+  letter-spacing: 1px;
+  overflow-wrap: anywhere;
+  margin-top: 6px;
+}
+.signin-sub { color: var(--muted); font-size: 16px; line-height: 1.5; margin-top: 18px; max-width: 320px; }
+.signin-actions { display: flex; flex-direction: column; gap: 12px; }
+.signin-note { color: var(--muted); font-size: 13px; text-align: center; }
+.signin-note.error { color: var(--red); }
+.signin-fine { color: var(--muted); font-size: 12px; text-align: center; opacity: 0.8; }
+
+.google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 54px;
+  border-radius: 14px;
+  background: #fff;
+  color: #1f1f1f;
+  font-size: 16px;
+  font-weight: 600;
+  transition: transform 0.12s;
+}
+.google-btn:not(:disabled):active { transform: scale(0.98); }
+.google-btn:disabled { opacity: 0.5; cursor: default; }
+
+.account-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 0;
+}
+.account-avatar { width: 20px; height: 20px; border-radius: 50%; flex: none; }
+.account-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-sync.synced { color: var(--green); }
+.account-sync.error { color: var(--orange); }
+.account-link {
+  flex: none;
+  color: var(--white);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 10px;
+  margin: -8px -10px -8px 0;
+  border-radius: 10px;
+}
+.account-link:active { background: var(--surface2); }
+.account-link:disabled { opacity: 0.5; }

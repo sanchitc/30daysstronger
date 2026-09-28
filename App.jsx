@@ -4,6 +4,11 @@ import { Confetti, playApplause } from "./Celebrate.jsx";
 import ExerciseSheet from "./ExerciseSheet.jsx";
 import Builder from "./Builder.jsx";
 import ProgressGrid from "./ProgressGrid.jsx";
+import { SignInScreen, AccountBar } from "./Auth.jsx";
+import {
+  supabase, googleEnabled, signInWithGoogle, signOut,
+  pullRemote, mergeProgress, pushAll, pushDay, pushStart,
+} from "./supabase.js";
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
 
@@ -14,6 +19,15 @@ function load() {
 }
 function save(data) {
   try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {}
+}
+
+// Set once someone chooses "Continue without an account".
+const SKIP_KEY = "training_tracker_skip_signin";
+function skippedSignIn() {
+  try { return localStorage.getItem(SKIP_KEY) === "1"; } catch { return false; }
+}
+function rememberSkip(on) {
+  try { on ? localStorage.setItem(SKIP_KEY, "1") : localStorage.removeItem(SKIP_KEY); } catch {}
 }
 
 function todayKey() {
@@ -80,12 +94,90 @@ export default function App() {
   const [celebrate, setCelebrate] = useState(false);
   const wasComplete = useRef(false);
 
+  // ── Account ──
+  const [session, setSession] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [googleOn, setGoogleOn] = useState(null);
+  const [skipped, setSkipped] = useState(skippedSignIn);
+  const [sync, setSync] = useState(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const [authError, setAuthError] = useState(null);
+  const syncedFor = useRef(null);
+  const userId = session?.user?.id || null;
+
+  // Pull the account's progress, fold in this device's, and push the result.
+  const syncFrom = async (uid) => {
+    if (syncedFor.current === uid) return;
+    syncedFor.current = uid;
+    setSync("syncing");
+    try {
+      const merged = mergeProgress(load(), await pullRemote(uid), uid);
+      if (!merged.startDate) merged.startDate = todayKey();
+      save(merged);
+      setData(merged);
+      setDayNumber(dayFromStart(merged.startDate));
+      await pushAll(uid, merged);
+      setSync("synced");
+    } catch (err) {
+      console.error("Sync failed", err);
+      syncedFor.current = null;
+      setSync("error");
+    }
+  };
+
+  useEffect(() => {
+    googleEnabled().then(setGoogleOn);
+    // If Supabase can't be reached, don't hold the app back.
+    const fallback = setTimeout(() => setAuthReady(true), 3000);
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s);
+      setAuthReady(true);
+      // Supabase calls can't be awaited inside this callback — defer them.
+      if (s) setTimeout(() => syncFrom(s.user.id), 0);
+    });
+    return () => { clearTimeout(fallback); sub.subscription.unsubscribe(); };
+  }, []);
+
+  const handleSignIn = async () => {
+    setAuthError(null);
+    setSigningIn(true);
+    const { error } = await signInWithGoogle();
+    if (error) {
+      setAuthError(error.message);
+      setSigningIn(false);
+    }
+  };
+
+  const handleSkip = () => { rememberSkip(true); setSkipped(true); };
+
+  // Signing out leaves the account's progress in the cloud and clears this
+  // device, so the next person to sign in here starts clean.
+  const handleSignOut = async () => {
+    await signOut();
+    try { localStorage.removeItem(KEY); } catch {}
+    rememberSkip(false);
+    syncedFor.current = null;
+    setSkipped(false);
+    setSync(null);
+    setData({});
+    setDayNumber(1);
+  };
+
+  const pushSafely = (task) => {
+    setSync("syncing");
+    task.then(
+      () => setSync("synced"),
+      (err) => { console.error("Sync failed", err); setSync("error"); }
+    );
+  };
+
   // Remember when the plan started so the day number can advance on its own.
   useEffect(() => {
     if (!data.startDate) {
       const next = { ...data, startDate: todayKey() };
       setData(next);
       save(next);
+      if (userId && data.owner === userId) pushSafely(pushStart(userId, next.startDate));
     }
   }, [data]);
 
@@ -107,30 +199,35 @@ export default function App() {
     wasComplete.current = complete;
   }, [complete]);
 
-  const persist = (next) => { setData(next); save(next); };
+  // Save locally, then — when signed in — push the day that changed.
+  const persist = (next, day) => {
+    setData(next);
+    save(next);
+    if (userId && next.owner === userId) pushSafely(pushDay(userId, next, day));
+  };
 
   const toggle = (bi, ei) => {
     const k = `${bi}:${ei}`;
     const dayDone = { ...done, [k]: !done[k] };
     if (!dayDone[k]) delete dayDone[k];
-    persist({ ...data, progress: { ...(data.progress || {}), [dayNumber]: dayDone } });
+    persist({ ...data, progress: { ...(data.progress || {}), [dayNumber]: dayDone } }, dayNumber);
   };
 
   const resetDay = () => {
     const progress = { ...(data.progress || {}) };
     delete progress[dayNumber];
-    persist({ ...data, progress });
+    persist({ ...data, progress }, dayNumber);
   };
 
   const saveWorkout = (draft) => {
     setBuilding(false);
-    persist({ ...data, custom: { ...(data.custom || {}), [dayNumber]: draft } });
+    persist({ ...data, custom: { ...(data.custom || {}), [dayNumber]: draft } }, dayNumber);
   };
 
   const clearCustom = () => {
     const custom = { ...(data.custom || {}) };
     delete custom[dayNumber];
-    persist({ ...data, custom });
+    persist({ ...data, custom }, dayNumber);
   };
 
   const isCustom = Boolean(data.custom?.[dayNumber]);
@@ -152,6 +249,25 @@ export default function App() {
   for (let n = isDone(dayNumber) ? dayNumber : dayNumber - 1; n >= 1 && isDone(n); n--) streak++;
 
   const blankDay = { day: dayNumber, title: `Day ${dayNumber}`, focus: "", blocks: [] };
+
+  // Hold the first paint until we know whether someone is signed in, so the
+  // sign-in screen doesn't flash for people who already are.
+  if (!authReady) return <div className="app" />;
+
+  // No point asking people to sign in while Google isn't switched on.
+  if (!session && !skipped && googleOn !== false) {
+    return (
+      <div className="app">
+        <SignInScreen
+          googleOn={googleOn}
+          busy={signingIn}
+          error={authError}
+          onGoogle={handleSignIn}
+          onSkip={handleSkip}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="app">
@@ -194,6 +310,14 @@ export default function App() {
           </div>
         )}
         {streak > 1 && <p className="streak-line">🔥 {streak} days in a row</p>}
+        <AccountBar
+          session={session}
+          sync={sync}
+          googleOn={googleOn}
+          busy={signingIn}
+          onSignIn={handleSignIn}
+          onSignOut={handleSignOut}
+        />
       </header>
 
       {total === 0 && (
