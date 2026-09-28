@@ -2,7 +2,7 @@
 
 A dead-simple daily training tracker. One day, one workout, one checklist.
 
-![Day 1](https://img.shields.io/badge/day%201-legs%20%26%20arms-E63946)
+![30 days programmed](https://img.shields.io/badge/30%20days-programmed-E63946)
 
 ## What it does
 
@@ -20,15 +20,23 @@ A dead-simple daily training tracker. One day, one workout, one checklist.
   what's done, what's half-finished, which days still need exercises — plus your
   current streak. Tap any day to jump to it.
 
-## Adding more days
+## The plan
 
-All 30 days already exist. Any day you haven't programmed comes out of the template in
-`plan.js` — a **Warm Up** section plus **four 3-round / 75s-rest** blocks, no exercises —
-so there's always a scaffold waiting. Two ways to fill one in:
+All 30 days are programmed in `plan.js`: four weeks of dumbbell, barbell, cable and
+bodyweight work, with active-recovery days on 7, 14, 21 and 26 and German Volume Training
+to finish on days 28–30. Every exercise links to its
+[free-exercise-db](https://github.com/yuhonas/free-exercise-db) entry for the how-to. The
+exceptions are the moves the database doesn't have (burpees, windshield wipers, jumping
+jacks); those show a one-line how-to in their note instead.
+
+## Changing a day
+
+Any day missing from `DEFINED` comes out of the template in `plan.js` — a **Warm Up**
+section plus **four 3-round / 75s-rest** blocks, no exercises. Two ways to change a day:
 
 **1. Edit `plan.js` (the source of truth)**
 
-Add the day to the `DEFINED` array and it replaces the template for that day number:
+Each entry in the `DEFINED` array is one day:
 
 ```js
 {
@@ -62,7 +70,7 @@ into the file so it's shared across devices and doesn't live only in one browser
 
 | File | What's in it |
 | --- | --- |
-| `plan.js` | The 30-day plan — the empty-day template plus every day you've programmed |
+| `plan.js` | The 30-day plan — all 30 days, plus the empty-day template |
 | `App.jsx` | Today's workout screen, progress, rest timer |
 | `Builder.jsx` | The day builder + `Copy JSON` export |
 | `ProgressGrid.jsx` | The 30-day map: streak, completion, jump-to-day |
