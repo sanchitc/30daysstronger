@@ -31,8 +31,14 @@ Two tables in the Supabase project hold it, both locked to their owner with row-
 
 | Table | One row per | Holds |
 | --- | --- | --- |
-| `challenges` | user | `start_date` — the day your 30 days began |
-| `day_progress` | user × day | `done` (ticked boxes), `custom` (a day you built in the app) |
+| `challenges` | user | `program` (active challenge), `start_date` (the day it began), `completions` (badges earned) |
+| `day_progress` | user × day | `done` (ticked boxes), `custom` (a day you built in the app), for the active challenge |
+
+Starting or ending a challenge deletes that user's `day_progress` rows and rewrites the
+`challenges` row. On sign-in, if the device and the account have different challenges, the
+one started most recently wins, and badges from both are kept. Progress saved before
+the catalog existed has no program recorded, so it's treated as 30 Days Stronger.
+The schema is in `supabase/migrations/`.
 
 `supabase.js` has the project URL and publishable key built in. That key is designed to be
 public, and row-level security is what protects the data. Set `VITE_SUPABASE_URL` /
@@ -51,9 +57,58 @@ public, and row-level security is what protects the data. Set `VITE_SUPABASE_URL
 
 Until Google is enabled, the app skips the sign-in screen and works offline as before.
 
+## Challenges
+
+The app is a catalog of 30-day challenges. One is active at a time; the rest can be
+previewed day by day.
+
+- **First visit:** the catalog. Tap a challenge to preview it: what it's for, the four
+  weeks, and every one of the 30 days. Tap a day to see inside it. Then **Start Day 1 today**.
+- **After that:** the app opens straight on your current day's workout. The
+  `Challenges` button in the header goes back to the catalog; the program name goes to its plan.
+- **Switching or ending:** starting a different challenge, or **End this challenge** at the
+  bottom of the active one's plan, first warns that the 30-day progress will be lost. If you
+  confirm, the new challenge starts today at Day 1.
+- **Badges:** tick every box of all 30 days and the challenge is complete. You get a
+  badge on the home screen's trophy shelf, and your rank grows with the count: Finisher (1), Committed (2),
+  Relentless (3), Unbreakable (5), Legend (10). Each run counts once. Switching programs never
+  removes a badge.
+- **NEW tags** mark the first time a move appears in a program.
+- Moving between screens uses the browser's View Transitions API. The program's colour panel
+  moves from its card to the preview and then to the workout header. Browsers without the
+  API get a simple fade-in, and reduced-motion turns both off.
+
+The catalog lives in `programs.js`. To add a challenge, write its 30 days in the same shape
+as `plan.js` and add an entry with its name, description, theme colours and week summaries.
+
+| Challenge | For | Kit | Per day |
+| --- | --- | --- | --- |
+| **30 Days Stronger** (`plan.js`) | Gym-goers wanting a hard month | Dumbbells, barbell, cables | 45-60 min |
+| **Ageless Strength** (`plan-ageless.js`) | 60+ or returning to exercise | Bodyweight + light band, a chair, a counter | 20-30 min |
+
+### Ageless Strength
+
+A gentler month aimed at mobility first, then muscle. Every day opens with joint circles
+and ends with stretches. Training days rotate between legs & balance, upper body & posture,
+and core & mobility, with a Restore day (walk + stretch flow) on 7, 14, 21 and 28.
+
+| Week | Theme | Volume |
+| --- | --- | --- |
+| 1 | Foundations: chair squat, wall push-up, bridge, band pull-apart, balance holds | 2 rounds · 8-10 reps · 60s rest |
+| 2 | Add the band: band squats, rows, chest press; push-ups move to the counter | 2 rounds · 10-12 reps |
+| 3 | Build: single-leg bridges, step-ups with knee lift, side planks, woodchops | 3 rounds · 10-12 reps |
+| 4 | Own it: combined moves, chair push-ups, bridge marches | 3 rounds · 12-15 reps · 45s rest |
+
+Each day keeps the moves you've learned and adds one or two new ones (88 different moves
+over the month). Day 30 repeats Day 1's moves with nearly double the reps, so you can feel how
+far you've come. Every move links to a free-exercise-db entry, except a few balance drills
+the database doesn't have; those carry a one-line how-to. When the database only has a
+cable or dumbbell version of a move, the note explains how to do it with a band or bodyweight.
+The workout screen uses larger type for this program.
+
 ## The plan
 
-All 30 days are programmed in `plan.js`: four weeks of dumbbell, barbell, cable and
+All 30 days of 30 Days Stronger are programmed in `plan.js`: four weeks of dumbbell, barbell, cable and
 bodyweight work, with active-recovery days on 7, 14, 21 and 26 and German Volume Training
 to finish on days 28–30. Every exercise links to its
 [free-exercise-db](https://github.com/yuhonas/free-exercise-db) entry for the how-to. The
@@ -101,8 +156,11 @@ into the file so it's shared across devices and doesn't live only in one browser
 
 | File | What's in it |
 | --- | --- |
-| `plan.js` | The 30-day plan — all 30 days, plus the empty-day template |
-| `App.jsx` | Today's workout screen, progress, rest timer |
+| `programs.js` | The challenge catalog, NEW-move tagging, badge ranks |
+| `plan.js` | 30 Days Stronger: all 30 days, plus the empty-day template |
+| `plan-ageless.js` | Ageless Strength: the 30-day 60+ program |
+| `App.jsx` | Screens and navigation, today's workout, progress, rest timer, switching |
+| `Catalog.jsx` | Home/catalog, program preview, day preview, badges, dialogs |
 | `Builder.jsx` | The day builder + `Copy JSON` export |
 | `ProgressGrid.jsx` | The 30-day map: streak, completion, jump-to-day |
 | `ExercisePicker.jsx` | Search/filter over the exercise database |
