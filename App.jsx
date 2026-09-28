@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { PLAN, TOTAL_DAYS, getDay, countExercises, countDone } from "./plan.js";
+import { flushSync } from "react-dom";
+import { countExercises, countDone } from "./plan.js";
+import { TOTAL_DAYS, getProgram, getProgramDay, newMoves } from "./programs.js";
+import {
+  HomeScreen, ProgramPreview, ConfirmDialog, ChallengeComplete, ProgramArt, themeVars,
+} from "./Catalog.jsx";
 import { Confetti, playApplause } from "./Celebrate.jsx";
 import ExerciseSheet from "./ExerciseSheet.jsx";
 import Builder from "./Builder.jsx";
@@ -7,7 +12,7 @@ import ProgressGrid from "./ProgressGrid.jsx";
 import { SignInScreen, AccountBar } from "./Auth.jsx";
 import {
   supabase, googleEnabled, signInWithGoogle, signOut,
-  pullRemote, mergeProgress, pushAll, pushDay, pushStart,
+  pullRemote, mergeProgress, normalize, pushAll, pushDay, pushChallenge, clearDays,
 } from "./supabase.js";
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
@@ -15,7 +20,7 @@ import {
 const KEY = "training_tracker_v1";
 
 function load() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; }
+  try { return normalize(JSON.parse(localStorage.getItem(KEY)) || {}); } catch { return normalize({}); }
 }
 function save(data) {
   try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {}
@@ -69,6 +74,25 @@ function RestTimer({ seconds, onDone }) {
   );
 }
 
+// Screen changes cross-fade and slide (View Transitions API where the browser
+// has it, a CSS entrance otherwise). "back" plays the slide in reverse.
+const canTransition = typeof document !== "undefined" && "startViewTransition" in document;
+function reducedMotion() {
+  try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
+}
+
+function daySummaries(program, data) {
+  if (!program) return [];
+  return program.days.map((planDay) => {
+    const n = planDay.day;
+    const w = data.custom?.[n] || planDay;
+    const t = countExercises(w);
+    const d = countDone(w, data.progress?.[n]);
+    const status = t === 0 ? "empty" : d >= t ? "complete" : d > 0 ? "started" : "ready";
+    return { day: n, total: t, done: d, status };
+  });
+}
+
 // A block's heading: its own label if it has one, otherwise the rounds it runs.
 function blockHeading(block) {
   const rounds =
@@ -87,12 +111,17 @@ export default function App() {
     const d = load();
     return dayFromStart(d.startDate || todayKey());
   });
+  // After the first time, the app opens straight on the workout.
+  const [screen, setScreen] = useState(() => (load().program ? { name: "workout" } : { name: "home" }));
+  const [confirm, setConfirm] = useState(null);
+  const [finished, setFinished] = useState(null);
+  const navigated = useRef(false);
   const [sheetItem, setSheetItem] = useState(null);
   const [building, setBuilding] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
   const [rest, setRest] = useState(null);
   const [celebrate, setCelebrate] = useState(false);
-  const wasComplete = useRef(false);
+  const wasComplete = useRef(null);
 
   // ── Account ──
   const [session, setSession] = useState(null);
@@ -111,12 +140,15 @@ export default function App() {
     syncedFor.current = uid;
     setSync("syncing");
     try {
-      const merged = mergeProgress(load(), await pullRemote(uid), uid);
-      if (!merged.startDate) merged.startDate = todayKey();
+      const { merged, wipe } = mergeProgress(load(), await pullRemote(uid), uid);
+      if (merged.program && !merged.startDate) merged.startDate = todayKey();
       save(merged);
       setData(merged);
-      setDayNumber(dayFromStart(merged.startDate));
-      await pushAll(uid, merged);
+      setDayNumber(dayFromStart(merged.startDate || todayKey()));
+      // A new device opens where the account left off — unless the person has
+      // already started finding their way around.
+      if (!navigated.current) setScreen(merged.program ? { name: "workout" } : { name: "home" });
+      await pushAll(uid, merged, { wipe });
       setSync("synced");
     } catch (err) {
       console.error("Sync failed", err);
@@ -157,10 +189,12 @@ export default function App() {
     try { localStorage.removeItem(KEY); } catch {}
     rememberSkip(false);
     syncedFor.current = null;
+    navigated.current = false;
     setSkipped(false);
     setSync(null);
-    setData({});
+    setData(normalize({}));
     setDayNumber(1);
+    setScreen({ name: "home" });
   };
 
   const pushSafely = (task) => {
@@ -171,17 +205,60 @@ export default function App() {
     );
   };
 
+  const program = getProgram(data.program);
+
   // Remember when the plan started so the day number can advance on its own.
   useEffect(() => {
-    if (!data.startDate) {
+    if (program && !data.startDate) {
       const next = { ...data, startDate: todayKey() };
       setData(next);
       save(next);
-      if (userId && data.owner === userId) pushSafely(pushStart(userId, next.startDate));
+      if (userId && data.owner === userId) pushSafely(pushChallenge(userId, next));
     }
   }, [data]);
 
-  const workout = data.custom?.[dayNumber] || getDay(dayNumber);
+  const navigate = (next, dir = "forward") => {
+    navigated.current = true;
+    const apply = () => {
+      setScreen(next);
+      window.scrollTo(0, 0);
+    };
+    if (!canTransition || reducedMotion()) return apply();
+    document.documentElement.dataset.nav = dir;
+    document.startViewTransition(() => flushSync(apply));
+  };
+
+  const openProgram = (id) => navigate({ name: "preview", id });
+  const goHome = () => navigate({ name: "home" }, "back");
+  const goWorkout = () => navigate({ name: "workout" });
+
+  // Start a challenge at Day 1 today. Whatever was active before is cleared —
+  // the badges stay.
+  const startProgram = (id) => {
+    setConfirm(null);
+    const next = { ...data, program: id, startDate: todayKey(), progress: {}, custom: {} };
+    setData(next);
+    save(next);
+    setDayNumber(1);
+    if (userId && next.owner === userId) {
+      pushSafely(clearDays(userId).then(() => pushChallenge(userId, next)));
+    }
+    navigate({ name: "workout" });
+  };
+
+  const endProgram = () => {
+    setConfirm(null);
+    const next = { ...data, program: null, startDate: null, progress: {}, custom: {} };
+    setData(next);
+    save(next);
+    setDayNumber(1);
+    if (userId && next.owner === userId) {
+      pushSafely(clearDays(userId).then(() => pushChallenge(userId, next)));
+    }
+    navigate({ name: "home" }, "back");
+  };
+
+  const workout = data.custom?.[dayNumber] || getProgramDay(program, dayNumber);
   const done = data.progress?.[dayNumber] || {};
   const total = countExercises(workout);
   // Count only boxes that exist in the workout as it stands now — editing a day
@@ -189,15 +266,18 @@ export default function App() {
   const doneCount = countDone(workout, done);
   const complete = total > 0 && doneCount >= total;
 
-  // Celebrate the moment the last box is ticked — but not on reload.
+  // Celebrate the moment the last box is ticked — but not on reload, and not
+  // when moving to a day that was finished earlier.
+  const dayKey = `${data.program}|${data.startDate}|${dayNumber}`;
   useEffect(() => {
-    if (complete && !wasComplete.current) {
+    const prev = wasComplete.current;
+    if (complete && prev && prev.key === dayKey && !prev.complete) {
       setCelebrate(true);
       playApplause();
       setTimeout(() => setCelebrate(false), 4000);
     }
-    wasComplete.current = complete;
-  }, [complete]);
+    wasComplete.current = { key: dayKey, complete };
+  }, [complete, dayKey]);
 
   // Save locally, then — when signed in — push the day that changed.
   const persist = (next, day) => {
@@ -231,16 +311,72 @@ export default function App() {
   };
 
   const isCustom = Boolean(data.custom?.[dayNumber]);
+  const fresh = isCustom ? new Set() : newMoves(program)[dayNumber] || new Set();
 
   // Every day, summarised for the 30-day map.
-  const dayStats = PLAN.map((planDay) => {
-    const n = planDay.day;
-    const w = data.custom?.[n] || planDay;
-    const t = countExercises(w);
-    const d = countDone(w, data.progress?.[n]);
-    const status = t === 0 ? "empty" : d >= t ? "complete" : d > 0 ? "started" : "ready";
-    return { day: n, total: t, done: d, status };
-  });
+  const dayStats = daySummaries(program, data);
+  const daysDone = dayStats.filter((d) => d.status === "complete").length;
+  const allDone = Boolean(program) && daysDone === TOTAL_DAYS;
+
+  // Every day of the challenge finished: that's a badge. Recorded once per
+  // run (program + start date), so unticking and reticking can't farm them.
+  useEffect(() => {
+    if (!allDone) return;
+    const key = `${data.program}|${data.startDate}`;
+    const list = data.completions || [];
+    if (list.some((c) => `${c.program}|${c.startDate}` === key)) return;
+    const completions = [...list, { program: data.program, startDate: data.startDate, finishedAt: todayKey() }];
+    const next = { ...data, completions };
+    setData(next);
+    save(next);
+    if (userId && next.owner === userId) pushSafely(pushChallenge(userId, next));
+    setFinished({ program: data.program, number: completions.length });
+  }, [allDone]);
+
+  const runsOf = (id) => (data.completions || []).filter((c) => c.program === id).length;
+
+  // What switching or ending costs, in words.
+  const lossLine = () => {
+    if (!program) return null;
+    if (allDone) return <>You finished {program.name} — your badge stays on your shelf.</>;
+    return (
+      <>
+        You're on <strong>Day {dayNumber}</strong> of {program.name} with{" "}
+        <strong>{daysDone} {daysDone === 1 ? "day" : "days"} done</strong>. That 30-day progress will be lost.
+      </>
+    );
+  };
+
+  const askStart = (id) => {
+    if (!program) return startProgram(id);
+    const target = getProgram(id);
+    setConfirm({
+      title: id === program.id ? `Restart ${target.name}?` : `Switch to ${target.name}?`,
+      body: (
+        <>
+          <p>{lossLine()}</p>
+          <p>{target.name} starts fresh today at <strong>Day 1</strong>.</p>
+        </>
+      ),
+      confirmLabel: id === program.id ? "Restart at Day 1" : "Switch & start Day 1",
+      danger: !allDone,
+      onConfirm: () => startProgram(id),
+    });
+  };
+
+  const askEnd = () =>
+    setConfirm({
+      title: `End ${program.name}?`,
+      body: (
+        <>
+          <p>{lossLine()}</p>
+          <p>You can start any challenge again, from Day 1.</p>
+        </>
+      ),
+      confirmLabel: "End challenge",
+      danger: true,
+      onConfirm: endProgram,
+    });
 
   // Consecutive finished days ending at today (or at yesterday, if today is
   // still in progress).
@@ -269,11 +405,105 @@ export default function App() {
     );
   }
 
-  return (
-    <div className="app">
-      <Confetti active={celebrate} />
+  const accountBar = (
+    <AccountBar
+      session={session}
+      sync={sync}
+      googleOn={googleOn}
+      busy={signingIn}
+      onSignIn={handleSignIn}
+      onSignOut={handleSignOut}
+    />
+  );
 
+  // Dialogs that can sit over any screen.
+  const overlays = (
+    <>
+      <Confetti active={celebrate || Boolean(finished)} />
+      {confirm && (
+        <ConfirmDialog
+          title={confirm.title}
+          confirmLabel={confirm.confirmLabel}
+          danger={confirm.danger}
+          onConfirm={confirm.onConfirm}
+          onCancel={() => setConfirm(null)}
+        >
+          {confirm.body}
+        </ConfirmDialog>
+      )}
+      {finished && (
+        <ChallengeComplete
+          program={getProgram(finished.program)}
+          number={finished.number}
+          onNext={() => { setFinished(null); goHome(); }}
+          onClose={() => setFinished(null)}
+        />
+      )}
+    </>
+  );
+
+  const previewing = screen.name === "preview" ? getProgram(screen.id) : null;
+  const screenKey = previewing ? `preview-${previewing.id}` : program && screen.name === "workout" ? "workout" : "home";
+  const enter = canTransition ? "" : " screen-in";
+
+  if (previewing) {
+    return (
+      <div className="app" key={screenKey}>
+        <div className={`screen${enter}`}>
+          <ProgramPreview
+            program={previewing}
+            activeId={data.program}
+            dayNumber={dayNumber}
+            dayStats={dayStats}
+            completedCount={runsOf(previewing.id)}
+            onBack={goHome}
+            onStart={askStart}
+            onContinue={goWorkout}
+            onEnd={askEnd}
+          />
+        </div>
+        {overlays}
+      </div>
+    );
+  }
+
+  if (!program || screen.name !== "workout") {
+    return (
+      <div className="app" key={screenKey}>
+        <div className={`screen${enter}`}>
+          <HomeScreen
+            active={program}
+            dayNumber={dayNumber}
+            daysDone={daysDone}
+            completions={data.completions || []}
+            onOpen={openProgram}
+            onContinue={goWorkout}
+            footer={<div className="home-foot">{accountBar}</div>}
+          />
+        </div>
+        {overlays}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`app${program.largeType ? " large-type" : ""}`}
+      style={themeVars(program)}
+      key={screenKey}
+    >
+      <div className={`screen${enter}`}>
       <header className="header">
+        <div className="program-bar">
+          <button className="home-btn" onClick={goHome} aria-label="All challenges">
+            <span className="home-grid" aria-hidden="true"><i /><i /><i /><i /></span>
+            Challenges
+          </button>
+          <button className="program-chip" onClick={() => openProgram(program.id)}>
+            <ProgramArt program={program} size="dot" vt />
+            {program.name}
+          </button>
+        </div>
         <div className="header-top">
           <div className="day-nav">
             <button
@@ -310,14 +540,7 @@ export default function App() {
           </div>
         )}
         {streak > 1 && <p className="streak-line">🔥 {streak} days in a row</p>}
-        <AccountBar
-          session={session}
-          sync={sync}
-          googleOn={googleOn}
-          busy={signingIn}
-          onSignIn={handleSignIn}
-          onSignOut={handleSignOut}
-        />
+        {accountBar}
       </header>
 
       {total === 0 && (
@@ -355,6 +578,7 @@ export default function App() {
                   <button className="ex-main" onClick={() => setSheetItem(ex)}>
                     <div className="ex-name">
                       {ex.name}
+                      {fresh.has(`${bi}:${ei}`) && <span className="new-pill">NEW</span>}
                       {ex.id && <span className="ex-info">▸ how-to</span>}
                     </div>
                     {ex.note && <div className="ex-note">{ex.note}</div>}
@@ -381,11 +605,12 @@ export default function App() {
           <button className="ghost-btn" onClick={resetDay}>Reset today's checkmarks</button>
           {isCustom && (
             <button className="ghost-btn" onClick={clearCustom}>
-              Revert this day to plan.js
+              Revert this day to the plan
             </button>
           )}
         </div>
       )}
+      </div>
 
       {showGrid && (
         <ProgressGrid
@@ -405,6 +630,7 @@ export default function App() {
           onCancel={() => setBuilding(false)}
         />
       )}
+      {overlays}
     </div>
   );
 }

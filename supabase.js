@@ -42,15 +42,33 @@ export function signOut() {
 
 // ─── Progress sync ───────────────────────────────────────────────────────────
 //
-// Local shape (unchanged from the offline app):
-//   { startDate, progress: { [day]: { "bi:ei": true } }, custom: { [day]: workout }, owner }
+// Local shape:
+//   { owner, program, startDate, progress: { [day]: { "bi:ei": true } },
+//     custom: { [day]: workout }, completions: [{ program, startDate, finishedAt }] }
 // Tables:
-//   challenges    (user_id, start_date)
-//   day_progress  (user_id, day, done, custom)
+//   challenges    (user_id, program, start_date, completions)
+//   day_progress  (user_id, day, done, custom) — always for the active program
+
+// Before the catalog there was only one program; progress with no program
+// belongs to it.
+export const LEGACY_PROGRAM = "stronger";
+
+export function normalize(data) {
+  if (!data) return {};
+  const hasWork =
+    Object.keys(data.progress || {}).length > 0 || Object.keys(data.custom || {}).length > 0;
+  const program = data.program !== undefined ? data.program : hasWork ? LEGACY_PROGRAM : null;
+  return {
+    ...data,
+    program,
+    startDate: program ? data.startDate || null : null,
+    completions: data.completions || [],
+  };
+}
 
 export async function pullRemote(userId) {
   const [challenge, days] = await Promise.all([
-    supabase.from("challenges").select("start_date").eq("user_id", userId).maybeSingle(),
+    supabase.from("challenges").select("start_date, program, completions").eq("user_id", userId).maybeSingle(),
     supabase.from("day_progress").select("day, done, custom").eq("user_id", userId),
   ]);
   if (challenge.error) throw challenge.error;
@@ -62,29 +80,68 @@ export async function pullRemote(userId) {
     if (row.done && Object.keys(row.done).length) progress[row.day] = row.done;
     if (row.custom) custom[row.day] = row.custom;
   }
-  return { startDate: challenge.data?.start_date || null, progress, custom };
+  const hasWork = Object.keys(progress).length > 0 || Object.keys(custom).length > 0;
+  const program = challenge.data?.program || (hasWork ? LEGACY_PROGRAM : null);
+  return {
+    program,
+    startDate: program ? challenge.data?.start_date || null : null,
+    progress,
+    custom,
+    completions: challenge.data?.completions || [],
+  };
 }
 
-// Fold the device's copy into the account's.
-//  - Device already belongs to this user: the account wins for every day it
-//    has; days only on the device (a save that never made it) are kept.
-//  - Anonymous device progress: ticks are unioned, so nothing done before
-//    signing in is lost.
+const completionKey = (c) => `${c.program}|${c.startDate}`;
+
+export function unionCompletions(a = [], b = []) {
+  const byKey = new Map();
+  for (const c of [...a, ...b]) if (!byKey.has(completionKey(c))) byKey.set(completionKey(c), c);
+  return [...byKey.values()].sort((x, y) => String(x.finishedAt).localeCompare(String(y.finishedAt)));
+}
+
+// Fold the device's copy into the account's. Returns the merged data and
+// whether the account's day rows belong to a different program and have to go.
 //  - Device belongs to someone else: ignored.
+//  - Same program on both: as before — the account wins per day for its own
+//    device, anonymous ticks are unioned, and the earliest start date wins.
+//  - Different programs: the one started most recently wins (a switch made on
+//    this device that never reached the account, or a fresh start before
+//    signing in). Ties go to the account.
+//  - Badges are always unioned — they're never lost.
 export function mergeProgress(local, remote, userId) {
   const mine = local.owner === userId;
   const anon = !local.owner;
-  const base = mine || anon ? local : {};
+  const base = mine || anon ? normalize(local) : normalize({});
+  const completions = unionCompletions(remote.completions, base.completions);
+
+  let pick;
+  if (!base.program) pick = "remote";
+  else if (!remote.program) pick = "local";
+  else if (base.program === remote.program) pick = "both";
+  else pick = (base.startDate || "") > (remote.startDate || "") ? "local" : "remote";
+
+  if (pick === "remote") {
+    const { program, startDate, progress, custom } = remote;
+    return { merged: { owner: userId, program, startDate, progress, custom, completions }, wipe: false };
+  }
+  if (pick === "local") {
+    const { program, startDate, progress = {}, custom = {} } = base;
+    return {
+      merged: { owner: userId, program, startDate, progress, custom, completions },
+      wipe: Boolean(remote.program),
+    };
+  }
 
   const startDate = [base.startDate, remote.startDate].filter(Boolean).sort()[0] || null;
-
   const progress = { ...(base.progress || {}) };
   for (const [day, done] of Object.entries(remote.progress)) {
     progress[day] = anon ? { ...(progress[day] || {}), ...done } : done;
   }
   const custom = { ...(base.custom || {}), ...remote.custom };
-
-  return { startDate, progress, custom, owner: userId };
+  return {
+    merged: { owner: userId, program: base.program, startDate, progress, custom, completions },
+    wipe: false,
+  };
 }
 
 function dayRow(userId, data, day) {
@@ -96,10 +153,17 @@ function dayRow(userId, data, day) {
   };
 }
 
-export async function pushStart(userId, startDate) {
-  const { error } = await supabase
-    .from("challenges")
-    .upsert({ user_id: userId, start_date: startDate }, { onConflict: "user_id" });
+// The challenge row: which program, when it started, and the badges earned.
+export async function pushChallenge(userId, data) {
+  const row = { user_id: userId, program: data.program || null, completions: data.completions || [] };
+  if (data.startDate) row.start_date = data.startDate;
+  const { error } = await supabase.from("challenges").upsert(row, { onConflict: "user_id" });
+  if (error) throw error;
+}
+
+// Starting or ending a challenge clears every day of the old one.
+export async function clearDays(userId) {
+  const { error } = await supabase.from("day_progress").delete().eq("user_id", userId);
   if (error) throw error;
 }
 
@@ -110,8 +174,9 @@ export async function pushDay(userId, data, day) {
   if (error) throw error;
 }
 
-export async function pushAll(userId, data) {
-  if (data.startDate) await pushStart(userId, data.startDate);
+export async function pushAll(userId, data, { wipe = false } = {}) {
+  if (wipe) await clearDays(userId);
+  await pushChallenge(userId, data);
   const days = new Set([...Object.keys(data.progress || {}), ...Object.keys(data.custom || {})]);
   if (!days.size) return;
   const { error } = await supabase
