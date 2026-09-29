@@ -10,7 +10,13 @@ A dead-simple daily training tracker. One day, one workout, one checklist.
 - **How-to for every move.** Tap an exercise for demo images and step-by-step instructions
   pulled from the [free-exercise-db](https://github.com/yuhonas/free-exercise-db)
   (876 exercises, public domain).
-- **Rest timer.** Tap `⏱ START REST` on any block for the countdown between rounds.
+- **Rest timer.** Tap `⏱ START REST` on any block for the countdown between rounds. It chimes when rest is up.
+- **Hold timer for timed moves.** Any move timed in seconds or minutes (planks, stretches,
+  balance holds, foam rolling, strides) gets a `▶` button in place of its reps. Tap it for a
+  full-screen countdown that's easy to read from the floor. It counts you in, handles
+  `(Each Leg)` with a 5-second side switch, runs sets like `6 × 20 sec` with recovery between,
+  beeps the last 3 seconds, and keeps the screen awake. When it finishes, the move is ticked
+  off (in single-round blocks; in multi-round blocks one hold is one round, so you tick it).
 - **A song for every move.** Give any exercise a Spotify track and a `▶` button appears on
   its row. One tap plays it in a small player docked at the bottom, and a second tap pauses it.
   Music keeps going through the rest timer. See [Music](#music).
@@ -217,6 +223,8 @@ into the file so it's shared across devices and doesn't live only in one browser
 | `plan-ageless.js` | Ageless Strength: the 30-day 60+ program |
 | `plan-marathon.js` | Marathon Final 30: the last month before a marathon |
 | `App.jsx` | Screens and navigation, today's workout, progress, rest timer, switching |
+| `HoldTimer.jsx` | Full-screen countdown for timed moves |
+| `timer.js` | Reads timed reps into timer phases; beeps and vibration |
 | `Catalog.jsx` | Home/catalog, program preview, day preview, badges, dialogs |
 | `Builder.jsx` | The day builder + `Copy JSON` export |
 | `ProgressGrid.jsx` | The 30-day map: streak, completion, jump-to-day |

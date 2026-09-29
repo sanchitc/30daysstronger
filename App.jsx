@@ -10,6 +10,8 @@ import ExerciseSheet from "./ExerciseSheet.jsx";
 import Builder from "./Builder.jsx";
 import ProgressGrid from "./ProgressGrid.jsx";
 import MusicDock from "./MusicDock.jsx";
+import HoldTimer from "./HoldTimer.jsx";
+import { parseTimed, timedLabel, primeAudio, finish as chime } from "./timer.js";
 import { songOf } from "./spotify.js";
 import { SignInScreen, AccountBar } from "./Auth.jsx";
 import {
@@ -60,6 +62,7 @@ function RestTimer({ seconds, onDone }) {
 
   useEffect(() => {
     if (left > 0) return;
+    chime();
     const t = setTimeout(onDone, 900);
     return () => clearTimeout(t);
   }, [left, onDone]);
@@ -122,6 +125,7 @@ export default function App() {
   const [building, setBuilding] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
   const [rest, setRest] = useState(null);
+  const [hold, setHold] = useState(null);
   const dock = useRef(null);
   const [music, setMusic] = useState({ uri: null, paused: true });
   const [celebrate, setCelebrate] = useState(false);
@@ -295,6 +299,23 @@ export default function App() {
     const dayDone = { ...done, [k]: !done[k] };
     if (!dayDone[k]) delete dayDone[k];
     persist({ ...data, progress: { ...(data.progress || {}), [dayNumber]: dayDone } }, dayNumber);
+  };
+
+  // Tick a box on (never off) — used when a hold timer runs to the end.
+  const latest = useRef(data);
+  latest.current = data;
+  const markDone = (day, bi, ei) => {
+    const k = `${bi}:${ei}`;
+    const cur = latest.current;
+    const dayDone = cur.progress?.[day] || {};
+    if (dayDone[k]) return;
+    persist({ ...cur, progress: { ...(cur.progress || {}), [day]: { ...dayDone, [k]: true } } }, day);
+  };
+
+  const startHold = (ex, block, bi, ei) => {
+    primeAudio();
+    setRest(null);
+    setHold({ ex, plan: parseTimed(ex.reps), autoTick: block.rounds <= 1, day: dayNumber, bi, ei, id: Date.now() });
   };
 
   const resetDay = () => {
@@ -562,7 +583,7 @@ export default function App() {
                 {blockHeading(block)}
               </span>
               {block.rest > 0 && (
-                <button className="rest-btn" onClick={() => setRest({ seconds: block.rest, id: Date.now() })}>
+                <button className="rest-btn" onClick={() => { primeAudio(); setRest({ seconds: block.rest, id: Date.now() }); }}>
                   ⏱ START REST
                 </button>
               )}
@@ -572,6 +593,7 @@ export default function App() {
               const isDone = Boolean(done[`${bi}:${ei}`]);
               const song = songOf(ex);
               const playing = song && music.uri === song.uri && !music.paused;
+              const timed = parseTimed(ex.reps);
               return (
                 <div className={`ex-row ${isDone ? "done" : ""}`} key={ei}>
                   <button
@@ -590,7 +612,20 @@ export default function App() {
                     {ex.note && <div className="ex-note">{ex.note}</div>}
                     {song?.title && <div className="ex-song">♪ {song.title}</div>}
                   </button>
-                  {ex.reps && <span className="ex-reps">{ex.reps}</span>}
+                  {ex.reps && !timed && <span className="ex-reps">{ex.reps}</span>}
+                  {timed && (
+                    <button
+                      className="ex-reps timed"
+                      onClick={() => startHold(ex, block, bi, ei)}
+                      aria-label={`Start ${ex.reps} timer for ${ex.name}`}
+                    >
+                      <span className="timed-play" aria-hidden="true" />
+                      <span className="timed-text">
+                        <span className="timed-main">{timedLabel(ex.reps).main}</span>
+                        {timedLabel(ex.reps).sub && <span className="timed-sub">{timedLabel(ex.reps).sub}</span>}
+                      </span>
+                    </button>
+                  )}
                   {song && (
                     <button
                       className={`song-btn${playing ? " on" : ""}`}
@@ -639,6 +674,16 @@ export default function App() {
       )}
       <MusicDock ref={dock} onChange={setMusic} />
       {rest && <RestTimer key={rest.id} seconds={rest.seconds} onDone={() => setRest(null)} />}
+      {hold && (
+        <HoldTimer
+          key={hold.id}
+          exercise={hold.ex}
+          plan={hold.plan}
+          autoTick={hold.autoTick}
+          onComplete={() => markDone(hold.day, hold.bi, hold.ei)}
+          onClose={() => setHold(null)}
+        />
+      )}
       {sheetItem && <ExerciseSheet item={sheetItem} onClose={() => setSheetItem(null)} />}
       {building && (
         <Builder
