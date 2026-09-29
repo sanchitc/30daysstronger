@@ -1,5 +1,7 @@
 import { useState } from "react";
 import ExercisePicker from "./ExercisePicker.jsx";
+import SongPicker from "./SongPicker.jsx";
+import { songOf } from "./spotify.js";
 
 const emptyBlock = () => ({ label: null, rounds: 3, rest: 75, exercises: [] });
 
@@ -19,8 +21,10 @@ export function toPlanJson(workout) {
     lines.push(`        rest: ${b.rest ? b.rest : "null"},`);
     lines.push("        exercises: [");
     for (const e of b.exercises) {
+      const song = songOf(e);
+      const songPart = song ? `, song: { uri: ${q(song.uri)}, title: ${q(song.title)} }` : "";
       lines.push(
-        `          { name: ${q(e.name)}, id: ${q(e.id)}, reps: ${q(e.reps)}, note: ${q(e.note)} },`
+        `          { name: ${q(e.name)}, id: ${q(e.id)}, reps: ${q(e.reps)}, note: ${q(e.note)}${songPart} },`
       );
     }
     lines.push("        ],");
@@ -34,6 +38,7 @@ export function toPlanJson(workout) {
 export default function Builder({ workout, onSave, onCancel }) {
   const [draft, setDraft] = useState(() => structuredClone(workout));
   const [pickerFor, setPickerFor] = useState(null); // block index
+  const [songFor, setSongFor] = useState(null); // [block index, exercise index]
   const [copied, setCopied] = useState(false);
 
   const update = (fn) => setDraft((d) => { const next = structuredClone(d); fn(next); return next; });
@@ -152,6 +157,22 @@ export default function Builder({ workout, onSave, onCancel }) {
                     {ex.id ? "● linked" : "○ custom"}
                   </span>
                 </div>
+                <div className="b-ex-row">
+                  {songOf(ex) ? (
+                    <>
+                      <button className="b-song set" onClick={() => setSongFor([bi, ei])}>
+                        ♪ {songOf(ex).title || "Spotify track"}
+                      </button>
+                      <button
+                        className="b-del icon"
+                        onClick={() => setEx(bi, ei, "song", null)}
+                        aria-label="Remove song"
+                      >✕</button>
+                    </>
+                  ) : (
+                    <button className="b-song" onClick={() => setSongFor([bi, ei])}>♪ Add song</button>
+                  )}
+                </div>
               </div>
             ))}
 
@@ -169,6 +190,13 @@ export default function Builder({ workout, onSave, onCancel }) {
         <button className="btn primary" onClick={() => onSave(draft)}>Save workout</button>
       </div>
 
+      {songFor && (
+        <SongPicker
+          exercise={draft.blocks[songFor[0]].exercises[songFor[1]]}
+          onPick={(song) => { setEx(songFor[0], songFor[1], "song", song); setSongFor(null); }}
+          onClose={() => setSongFor(null)}
+        />
+      )}
       {pickerFor !== null && (
         <ExercisePicker onPick={addExercise} onClose={() => setPickerFor(null)} />
       )}

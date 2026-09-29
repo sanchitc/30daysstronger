@@ -11,12 +11,14 @@
 //               label      optional section name ("Warm Up", "Finisher")
 //               rounds     how many times through (1 = straight set)
 //               rest       seconds of rest between rounds (null = none shown)
-//               exercises  [{ name, id, reps, note }]
+//               exercises  [{ name, id, reps, note, song }]
 //                            name  what is shown in the list
 //                            id    free-exercise-db id (for the demo + how-to),
 //                                  or null for anything not in the database
 //                            reps  free text — "15", "15 (Each Arm)", "30 sec"
 //                            note  optional small grey line under the name
+//                            song  optional Spotify track for a ▶ button on
+//                                  the row: { uri: "spotify:track:<id>", title }
 //
 // Tip: hit "EDIT" in the app to assemble a day by searching the exercise
 // database, then use "Copy JSON" and paste the result into DEFINED below.
@@ -41,7 +43,9 @@ function template(day) {
 
 // Shorthands for days 2-30. They build the same objects written out longhand in
 // day 1, so a block pasted from the builder's Copy JSON still drops in as-is.
-const x = (name, id, reps, note = null) => ({ name, id, reps, note });
+// song: optional Spotify track, "spotify:track:<id>" or { uri, title }.
+const x = (name, id, reps, note = null, song = null) =>
+  song ? { name, id, reps, note, song } : { name, id, reps, note };
 const warmUp = (note = null) => ({
   label: "Warm Up",
   rounds: 1,

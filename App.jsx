@@ -9,6 +9,8 @@ import { Confetti, playApplause } from "./Celebrate.jsx";
 import ExerciseSheet from "./ExerciseSheet.jsx";
 import Builder from "./Builder.jsx";
 import ProgressGrid from "./ProgressGrid.jsx";
+import MusicDock from "./MusicDock.jsx";
+import { songOf } from "./spotify.js";
 import { SignInScreen, AccountBar } from "./Auth.jsx";
 import {
   supabase, googleEnabled, signInWithGoogle, signOut,
@@ -120,6 +122,8 @@ export default function App() {
   const [building, setBuilding] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
   const [rest, setRest] = useState(null);
+  const dock = useRef(null);
+  const [music, setMusic] = useState({ uri: null, paused: true });
   const [celebrate, setCelebrate] = useState(false);
   const wasComplete = useRef(null);
 
@@ -488,7 +492,7 @@ export default function App() {
 
   return (
     <div
-      className={`app${program.largeType ? " large-type" : ""}`}
+      className={`app${program.largeType ? " large-type" : ""}${music.uri ? " has-music" : ""}`}
       style={themeVars(program)}
       key={screenKey}
     >
@@ -566,6 +570,8 @@ export default function App() {
 
             {block.exercises.map((ex, ei) => {
               const isDone = Boolean(done[`${bi}:${ei}`]);
+              const song = songOf(ex);
+              const playing = song && music.uri === song.uri && !music.paused;
               return (
                 <div className={`ex-row ${isDone ? "done" : ""}`} key={ei}>
                   <button
@@ -582,8 +588,18 @@ export default function App() {
                       {ex.id && <span className="ex-info">▸ how-to</span>}
                     </div>
                     {ex.note && <div className="ex-note">{ex.note}</div>}
+                    {song?.title && <div className="ex-song">♪ {song.title}</div>}
                   </button>
                   {ex.reps && <span className="ex-reps">{ex.reps}</span>}
+                  {song && (
+                    <button
+                      className={`song-btn${playing ? " on" : ""}`}
+                      onClick={() => dock.current?.play(song.uri)}
+                      aria-label={`${playing ? "Pause" : "Play"} ${song.title || "song"} for ${ex.name}`}
+                    >
+                      {playing ? "❚❚" : "▶"}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -621,6 +637,7 @@ export default function App() {
           onClose={() => setShowGrid(false)}
         />
       )}
+      <MusicDock ref={dock} onChange={setMusic} />
       {rest && <RestTimer key={rest.id} seconds={rest.seconds} onDone={() => setRest(null)} />}
       {sheetItem && <ExerciseSheet item={sheetItem} onClose={() => setSheetItem(null)} />}
       {building && (

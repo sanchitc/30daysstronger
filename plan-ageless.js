@@ -19,7 +19,9 @@
 // or bodyweight. The few moves the database doesn't have (balance holds,
 // heel-to-toe walking) carry a one-line how-to instead.
 
-const x = (name, id, reps, note = null) => ({ name, id, reps, note });
+// song: optional Spotify track, "spotify:track:<id>" or { uri, title }.
+const x = (name, id, reps, note = null, song = null) =>
+  song ? { name, id, reps, note, song } : { name, id, reps, note };
 const block = (rounds, rest, exercises, label = null) => ({ label, rounds, rest, exercises });
 const warmUp = (...exercises) => block(1, null, exercises, "Warm Up");
 const coolDown = (...exercises) => block(1, null, exercises, "Cool Down");

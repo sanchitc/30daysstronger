@@ -11,6 +11,9 @@ A dead-simple daily training tracker. One day, one workout, one checklist.
   pulled from the [free-exercise-db](https://github.com/yuhonas/free-exercise-db)
   (876 exercises, public domain).
 - **Rest timer.** Tap `⏱ START REST` on any block for the countdown between rounds.
+- **A song for every move.** Give any exercise a Spotify track and a `▶` button appears on
+  its row. One tap plays it in a small player docked at the bottom, and a second tap pauses it.
+  Music keeps going through the rest timer. See [Music](#music).
 - **Build a day in seconds.** Hit `EDIT` → `+ Add exercise from database` → search, tap, set reps.
 - **Confetti + applause** when the last box is ticked.
 - Progress is kept in `localStorage`. The day number advances on its own from the day
@@ -56,6 +59,40 @@ public, and row-level security is what protects the data. Set `VITE_SUPABASE_URL
    for local development.
 
 Until Google is enabled, the app skips the sign-in screen and works offline as before.
+
+## Music
+
+Each exercise can carry an optional `song`:
+
+```js
+{ name: "Push-Ups", id: "Pushups", reps: "20", note: null,
+  song: { uri: "spotify:track:<22-char id>", title: "Song — Artist" } }
+```
+
+In the builder, tap **♪ Add song** under an exercise to search Spotify, or paste a share link
+(Spotify → Share → Copy song link). **Copy JSON** includes the song, so it drops straight into
+`plan.js`, where `x(name, id, reps, note, song)` takes it as a fifth argument.
+
+**Playback** uses Spotify's embed [iFrame API](https://developer.spotify.com/documentation/embeds/references/iframe-api).
+No login or API key is needed. People signed in to Spotify in that browser hear the full
+track, and everyone else hears a 30-second preview. One track plays at a time. On some phones
+the first play needs a tap on the docked player itself. If the player can't load, the dock
+links to the song on Spotify.
+
+**Search** runs through `api/spotify-search.js`, a Vercel function that calls the Spotify
+Web API with the Client Credentials flow (an app token with no user sign-in). It needs a
+Spotify app:
+
+1. [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) → *Create app*
+   (Web API). Since February 2026 the app owner needs Spotify Premium.
+2. Vercel → *Project → Settings → Environment Variables*: `SPOTIFY_CLIENT_ID`,
+   `SPOTIFY_CLIENT_SECRET`, and optionally `SPOTIFY_MARKET` (default `US`).
+3. Locally, `npx vercel dev` serves the function next to the app. With plain `npm run dev`,
+   search reports that it's unavailable and the paste-a-link field still works.
+
+Why not sign users in to Spotify? That route (Web Playback SDK / Connect) needs Premium for
+every listener, doesn't run in mobile browsers, and apps in development mode are capped at
+5 users.
 
 ## Challenges
 
@@ -166,6 +203,10 @@ into the file so it's shared across devices and doesn't live only in one browser
 | `ExercisePicker.jsx` | Search/filter over the exercise database |
 | `ExerciseSheet.jsx` | Per-exercise how-to (images + instructions) |
 | `exercises.js` | Database loader, search, image URLs |
+| `spotify.js` | Song links/URIs, search client, iFrame API loader |
+| `MusicDock.jsx` | The docked Spotify player the row `▶` buttons control |
+| `SongPicker.jsx` | Search Spotify or paste a link for one exercise |
+| `api/spotify-search.js` | Vercel function: Spotify search and track lookup (Client Credentials) |
 | `supabase.js` | Supabase client, Google sign-in, progress sync |
 | `Auth.jsx` | Sign-in screen and the account bar |
 | `public/exercises.json` | The 876-exercise database, fetched on demand |
