@@ -962,3 +962,94 @@ html[data-nav="back"]::view-transition-new(root) { animation-name: vt-in-back; }
 
 /* Long rep labels ("30 sec (Each Leg)") wrap instead of squeezing the name */
 .ex-reps { max-width: 34%; text-align: right; }
+
+/* ─── Music: per-exercise song + docked Spotify player ──────────────────── */
+
+.ex-song {
+  font-size: 11.5px;
+  color: var(--accent-2);
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ex-row.done .ex-song { color: var(--muted); }
+.song-btn {
+  flex: none;
+  width: 32px; height: 32px;
+  margin-top: -4px;
+  border-radius: 999px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 12px;
+  display: grid; place-items: center;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.song-btn.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-size: 10px; }
+.song-btn:active { transform: scale(0.9); }
+
+.music-dock {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  width: min(92vw, 420px);
+  transform: translate(-50%, calc(100% + 40px));
+  z-index: 39;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface2);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+  transition: transform 0.25s ease;
+  pointer-events: none;
+}
+.music-dock.open { transform: translate(-50%, 0); pointer-events: auto; }
+.music-frame { height: 80px; }
+.music-frame iframe { display: block; border: 0; }
+.music-x {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 26px; height: 26px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  font-size: 16px;
+  display: grid; place-items: center;
+}
+.music-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid; place-items: center;
+  font-size: 13px;
+  color: var(--white);
+  background: var(--surface2);
+}
+/* Rest timer sits above the dock, and the page scrolls clear of both. */
+.has-music .timer-bar { bottom: 108px; }
+.has-music .screen { padding-bottom: 100px; }
+
+.b-song {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px dashed var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.b-song.set { color: var(--accent-2); border-style: solid; background: var(--surface2); }
+
+.song-paste { display: flex; gap: 8px; margin-top: 10px; }
+.song-paste .picker-search { flex: 1; min-width: 0; }
+.song-error { color: var(--accent); font-size: 12px; margin-top: 6px; }
+.song-art {
+  flex: none;
+  width: 40px; height: 40px;
+  border-radius: 6px;
+  background: var(--surface2);
+  object-fit: cover;
+}
