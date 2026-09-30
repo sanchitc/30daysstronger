@@ -6,6 +6,7 @@
 
 import { PLAN as STRONGER_DAYS, TOTAL_DAYS } from "./plan.js";
 import AGELESS_DAYS from "./plan-ageless.js";
+import MARATHON_DAYS from "./plan-marathon.js";
 
 export const PROGRAMS = [
   {
@@ -50,6 +51,27 @@ export const PROGRAMS = [
       { title: "Week 4 · Own it", text: "Combined moves and a Day 30 re-test of Day 1." },
     ],
     days: AGELESS_DAYS,
+  },
+  {
+    id: "marathon",
+    name: "Marathon Final 30",
+    short: "Marathon",
+    tagline: "The last month before race day",
+    description:
+      "The final block of a marathon build, ending with the race on Day 30. You peak with a 20-mile long run on Day 14, then taper for three weeks: less running, same sharpness. Intervals, tempo and marathon-pace runs, two short strength sessions a week, and Rest & Roll days with the foam roller. Paces go by feel, so it fits any goal time.",
+    audience: "For runners with a marathon 30 days away and the base already built: you can run 13-15 mi (20-25 km) and have been running 25-35 mi (40-55 km) a week. Not a from-scratch plan.",
+    level: "Intermediate",
+    minutes: "30-180 min",
+    equipment: "Running shoes, a foam roller, a step; dumbbells optional",
+    theme: { a: "#3A86FF", b: "#8338EC", on: "#ffffff" },
+    glyph: "shoe",
+    weeks: [
+      { title: "Week 1 · Build", text: "800s, a tempo run and an 18-mile long run with a marathon-pace finish." },
+      { title: "Week 2 · Peak", text: "7 miles at marathon pace, 1K repeats and the 20-mile peak on Day 14." },
+      { title: "Week 3 · Taper", text: "About 25% less running, same intensity. Last long run: 12 miles." },
+      { title: "Week 4 · Race week", text: "Short race-pace sharpeners, carb-loading, and 26.2 on Day 30." },
+    ],
+    days: MARATHON_DAYS,
   },
 ];
 

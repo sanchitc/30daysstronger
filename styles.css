@@ -190,6 +190,41 @@ button { cursor: pointer; border: none; background: none; }
 }
 .ex-row.done .ex-reps { color: var(--muted); }
 
+/* A timed move's reps double as its start button. */
+.ex-reps.timed {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: -5px -6px 0 0;
+  padding: 6px 11px 6px 8px;
+  border-radius: 999px;
+  background: var(--surface2);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  font-size: 13px;
+  white-space: nowrap;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.ex-reps.timed:hover { background: color-mix(in srgb, var(--accent) 18%, var(--surface2)); }
+.ex-reps.timed:active { transform: scale(0.95); }
+.timed-play {
+  width: 18px; height: 18px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  position: relative;
+  flex: none;
+}
+.timed-play::after {
+  content: "";
+  position: absolute;
+  left: 7px; top: 5px;
+  border-left: 6px solid var(--on-accent);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+.ex-row.done .ex-reps.timed { border-color: var(--line); }
+.timed-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; }
+.timed-sub { font-size: 10.5px; color: var(--muted); font-weight: 500; max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
+
 /* ─── Footer actions ─────────────────────────────────────────────────────── */
 
 .footer { margin: 26px 14px 0; display: flex; flex-direction: column; gap: 10px; }
@@ -1052,4 +1087,112 @@ html[data-nav="back"]::view-transition-new(root) { animation-name: vt-in-back; }
   border-radius: 6px;
   background: var(--surface2);
   object-fit: cover;
+}
+
+/* ─── Hold timer ─────────────────────────────────────────────────────────── */
+
+.hold {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background:
+    radial-gradient(120% 70% at 50% 42%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
+    var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: max(18px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+  text-align: center;
+  animation: hold-in 0.22s ease-out;
+}
+@keyframes hold-in { from { opacity: 0; transform: scale(0.98); } }
+
+.hold-top { width: 100%; max-width: 440px; display: flex; align-items: center; justify-content: space-between; }
+.hold-kicker { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; }
+.hold-x {
+  width: 40px; height: 40px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  font-size: 22px;
+  display: grid; place-items: center;
+}
+.hold-name {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(34px, 10vw, 46px);
+  letter-spacing: 1px;
+  line-height: 1;
+  margin-top: 18px;
+  max-width: 440px;
+}
+.hold-note { color: var(--muted); font-size: 13.5px; line-height: 1.45; margin-top: 8px; max-width: 360px; }
+
+.hold-ring-wrap {
+  position: relative;
+  width: min(76vw, 300px);
+  aspect-ratio: 1;
+  margin: auto 0;
+}
+.hold-ring { width: 100%; height: 100%; display: block; }
+.hold-track { fill: none; stroke: var(--surface2); stroke-width: 12; }
+.hold-arc {
+  fill: none;
+  stroke: url(#hold-grad);
+  stroke-width: 12;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.12s linear, stroke 0.2s ease;
+}
+.hold-ready .hold-arc, .hold-gap .hold-arc { stroke: var(--muted); }
+.hold-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.hold-phase {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+.hold-ready .hold-phase, .hold-gap .hold-phase { color: var(--muted); }
+.hold-time {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(76px, 24vw, 104px);
+  line-height: 1;
+  letter-spacing: 2px;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.hold-done .hold-time { color: var(--accent-2); }
+.hold-paused { font-size: 12px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px; }
+
+.hold-steps { display: flex; gap: 6px; margin-bottom: 22px; }
+.hold-step { width: 26px; height: 5px; border-radius: 999px; background: var(--surface2); transition: background 0.2s ease; }
+.hold-step.is-now { background: var(--accent-2); }
+.hold-step.is-done { background: var(--accent); }
+
+.hold-actions { width: 100%; max-width: 440px; display: flex; gap: 10px; }
+.hold-actions button {
+  flex: 1;
+  padding: 17px;
+  border-radius: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  transition: transform 0.15s ease;
+}
+.hold-actions button:active { transform: scale(0.97); }
+.hold-main { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--on-accent); }
+.hold-ghost { background: var(--surface); color: var(--muted); }
+
+.large-type .ex-reps.timed { font-size: 14.5px; }
+.large-type .timed-sub { font-size: 12px; }
+.large-type .hold-note { font-size: 15.5px; }
+.large-type .hold-phase { font-size: 15px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hold { animation: none; }
+  .hold-arc { transition: none; }
 }

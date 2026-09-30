@@ -257,7 +257,7 @@ const DEFINED = [
       block(4, 60, [
         x("Incline Cable Fly", "Incline_Cable_Flye", "12", "1½ technique: half rep, full rep, count as one"),
         x("Diamond Push-Up", "Push-Ups_-_Close_Triceps_Position", "Till technique failure"),
-        x("3-Way Plank", "Plank", "30 sec each", "Straight, right side, left side"),
+        x("3-Way Plank", "Plank", "30 sec / 30 sec / 30 sec", "Straight, right side, left side"),
       ], GIANT),
       block(4, 60, [
         x("Close-Grip Bench Press", "Close-Grip_Barbell_Bench_Press", "10"),

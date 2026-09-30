@@ -10,7 +10,13 @@ A dead-simple daily training tracker. One day, one workout, one checklist.
 - **How-to for every move.** Tap an exercise for demo images and step-by-step instructions
   pulled from the [free-exercise-db](https://github.com/yuhonas/free-exercise-db)
   (876 exercises, public domain).
-- **Rest timer.** Tap `⏱ START REST` on any block for the countdown between rounds.
+- **Rest timer.** Tap `⏱ START REST` on any block for the countdown between rounds. It chimes when rest is up.
+- **Hold timer for timed moves.** Any move timed in seconds or minutes (planks, stretches,
+  balance holds, foam rolling, strides) gets a `▶` button in place of its reps. Tap it for a
+  full-screen countdown that's easy to read from the floor. It counts you in, handles
+  `(Each Leg)` with a 5-second side switch, runs sets like `6 × 20 sec` with recovery between,
+  beeps the last 3 seconds, and keeps the screen awake. When it finishes, the move is ticked
+  off (in single-round blocks; in multi-round blocks one hold is one round, so you tick it).
 - **A song for every move.** Give any exercise a Spotify track and a `▶` button appears on
   its row. One tap plays it in a small player docked at the bottom, and a second tap pauses it.
   Music keeps going through the rest timer. See [Music](#music).
@@ -122,6 +128,7 @@ as `plan.js` and add an entry with its name, description, theme colours and week
 | --- | --- | --- | --- |
 | **30 Days Stronger** (`plan.js`) | Gym-goers wanting a hard month | Dumbbells, barbell, cables | 45-60 min |
 | **Ageless Strength** (`plan-ageless.js`) | 60+ or returning to exercise | Bodyweight + light band, a chair, a counter | 20-30 min |
+| **Marathon Final 30** (`plan-marathon.js`) | Runners 30 days out from a marathon, base already built | Running shoes, foam roller, a step | 30-180 min |
 
 ### Ageless Strength
 
@@ -142,6 +149,24 @@ far you've come. Every move links to a free-exercise-db entry, except a few bala
 the database doesn't have; those carry a one-line how-to. When the database only has a
 cable or dumbbell version of a move, the note explains how to do it with a band or bodyweight.
 The workout screen uses larger type for this program.
+
+### Marathon Final 30
+
+The last block of a marathon build, with the race on Day 30. It isn't a from-scratch plan:
+it assumes you can already run 13-15 mi (20-25 km) and have been running 25-35 mi a week.
+
+| Week | Theme | Key sessions |
+| --- | --- | --- |
+| 1 | Build | 6 × 800 m, 4 mi tempo, 18 mi long run with a marathon-pace finish |
+| 2 | Peak | 7 mi at marathon pace, 5 × 1 km, 20 mi long run on Day 14 |
+| 3 | Taper | 4 × 1 mi cruise intervals, 5 mi at marathon pace, 12 mi long run |
+| 4 | Race week | 3 × 1 mi at marathon pace, sharpener, carb-load, shakeout, race |
+
+Paces are set by feel (easy, marathon pace, threshold, 10K), so the plan works for any goal
+time. Distances show in miles and km. Run days open with a drill warm-up. Two short strength
+sessions (A: legs, B: hips & core) get lighter as the race nears. Rest days are
+"Rest & Roll" (foam roller + mobility), so every day still has boxes to tick. Runs, drills
+and race-prep steps aren't in the exercise database, so they have a note in place of a how-to.
 
 ## The plan
 
@@ -196,7 +221,10 @@ into the file so it's shared across devices and doesn't live only in one browser
 | `programs.js` | The challenge catalog, NEW-move tagging, badge ranks |
 | `plan.js` | 30 Days Stronger: all 30 days, plus the empty-day template |
 | `plan-ageless.js` | Ageless Strength: the 30-day 60+ program |
+| `plan-marathon.js` | Marathon Final 30: the last month before a marathon |
 | `App.jsx` | Screens and navigation, today's workout, progress, rest timer, switching |
+| `HoldTimer.jsx` | Full-screen countdown for timed moves |
+| `timer.js` | Reads timed reps into timer phases; beeps and vibration |
 | `Catalog.jsx` | Home/catalog, program preview, day preview, badges, dialogs |
 | `Builder.jsx` | The day builder + `Copy JSON` export |
 | `ProgressGrid.jsx` | The 30-day map: streak, completion, jump-to-day |

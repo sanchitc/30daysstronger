@@ -18,6 +18,14 @@ function Glyph({ kind }) {
       </svg>
     );
   }
+  if (kind === "shoe") {
+    return (
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M5 33c0-6 2-12 5-17 1-2 3-2 4-1l3 4c1 1 3 1 4 0l3-3c1-1 2-1 3 0 4 5 10 8 16 9 2 .5 3 2 3 4v4H5z" fill="currentColor" />
+        <rect x="4" y="35" width="41" height="5" rx="2.5" fill="currentColor" />
+      </svg>
+    );
+  }
   return (
     <svg viewBox="0 0 48 48" aria-hidden="true">
       <rect x="4" y="17" width="6" height="14" rx="2" fill="currentColor" />
