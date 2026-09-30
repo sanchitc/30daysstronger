@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { countExercises, countDone } from "./plan.js";
-import { TOTAL_DAYS, getProgram, getProgramDay, newMoves } from "./programs.js";
+import {
+  TOTAL_DAYS, getProgram, getProgramDay, newMoves, todayKey, dayFromStart, daysUntil, summarize, streakAt,
+} from "./programs.js";
 import {
   HomeScreen, ProgramPreview, ConfirmDialog, ChallengeComplete, ProgramArt, themeVars,
 } from "./Catalog.jsx";
@@ -14,6 +16,11 @@ import HoldTimer from "./HoldTimer.jsx";
 import { parseTimed, timedLabel, primeAudio, finish as chime } from "./timer.js";
 import { songOf } from "./spotify.js";
 import { SignInScreen, AccountBar } from "./Auth.jsx";
+import {
+  CrewScreen, CrewHomeCard, CrewPeek, CheerBanner, AcceptInviteDialog,
+  StartPactSheet, JoinPactSheet, InviteMoreSheet, formatDay,
+} from "./Crew.jsx";
+import * as social from "./social.js";
 import {
   supabase, googleEnabled, signInWithGoogle, signOut,
   pullRemote, mergeProgress, normalize, pushAll, pushDay, pushChallenge, clearDays,
@@ -37,16 +44,6 @@ function skippedSignIn() {
 }
 function rememberSkip(on) {
   try { on ? localStorage.setItem(SKIP_KEY, "1") : localStorage.removeItem(SKIP_KEY); } catch {}
-}
-
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-// Day 1 is the day you first opened the app; it never runs past the plan.
-function dayFromStart(startDate) {
-  const diff = Math.floor((new Date(todayKey()) - new Date(startDate)) / 86400000) + 1;
-  return Math.min(Math.max(diff, 1), TOTAL_DAYS);
 }
 
 // ─── Rest timer ──────────────────────────────────────────────────────────────
@@ -86,18 +83,6 @@ function reducedMotion() {
   try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
 }
 
-function daySummaries(program, data) {
-  if (!program) return [];
-  return program.days.map((planDay) => {
-    const n = planDay.day;
-    const w = data.custom?.[n] || planDay;
-    const t = countExercises(w);
-    const d = countDone(w, data.progress?.[n]);
-    const status = t === 0 ? "empty" : d >= t ? "complete" : d > 0 ? "started" : "ready";
-    return { day: n, total: t, done: d, status };
-  });
-}
-
 // A block's heading: its own label if it has one, otherwise the rounds it runs.
 function blockHeading(block) {
   const rounds =
@@ -130,6 +115,16 @@ export default function App() {
   const [music, setMusic] = useState({ uri: null, paused: true });
   const [celebrate, setCelebrate] = useState(false);
   const wasComplete = useRef(null);
+
+  // ── Crew ──
+  const [crew, setCrew] = useState(null);
+  const [crewError, setCrewError] = useState(null);
+  const [crewLoading, setCrewLoading] = useState(false);
+  const [pendingInvite, setPendingInvite] = useState(social.capturePendingInvite);
+  const [inviteDialog, setInviteDialog] = useState(null); // { code, preview, error, busy }
+  const [crewSheet, setCrewSheet] = useState(null); // { name: "start" | "join" | "more", invite? }
+  const [crewBusy, setCrewBusy] = useState(false);
+  const [toast, setToast] = useState(null);
 
   // ── Account ──
   const [session, setSession] = useState(null);
@@ -173,10 +168,72 @@ export default function App() {
       setSession(s);
       setAuthReady(true);
       // Supabase calls can't be awaited inside this callback — defer them.
-      if (s) setTimeout(() => syncFrom(s.user.id), 0);
+      if (s) setTimeout(() => { syncFrom(s.user.id); startCrew(s); }, 0);
     });
     return () => { clearTimeout(fallback); sub.subscription.unsubscribe(); };
   }, []);
+
+  const flash = (text) => {
+    setToast({ text, id: Date.now() });
+  };
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3200);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const crewFor = useRef(null);
+  const refreshCrew = async (uid = crewFor.current) => {
+    if (!uid) return;
+    setCrewLoading(true);
+    try {
+      const next = await social.loadCrew(uid);
+      if (crewFor.current === uid) { setCrew(next); setCrewError(null); }
+    } catch (err) {
+      console.error("Crew failed to load", err);
+      setCrewError(err.message || "Check your connection.");
+    } finally {
+      setCrewLoading(false);
+    }
+  };
+
+  // Make sure there's a profile to be found by, then load the crew and open
+  // any invite that brought this person here.
+  const startCrew = async (s) => {
+    if (crewFor.current === s.user.id) return;
+    crewFor.current = s.user.id;
+    try {
+      await social.ensureProfile(s);
+    } catch (err) {
+      console.error("Profile failed", err);
+    }
+    refreshCrew(s.user.id);
+    const code = social.capturePendingInvite();
+    if (code) openInvite(code);
+  };
+
+  const openInvite = async (code) => {
+    setInviteDialog({ code, preview: null, error: null, busy: false });
+    try {
+      const preview = await social.invitePreview(code);
+      if (!preview) throw new Error("This invite link isn't valid any more. Ask for a new one.");
+      if (preview.user_id === crewFor.current) throw new Error("That's your own invite link. Send it to a friend!");
+      setInviteDialog({ code, preview, error: null, busy: false });
+    } catch (err) {
+      social.clearPendingInvite();
+      setPendingInvite(null);
+      setInviteDialog({ code, preview: null, error: err.message, busy: false });
+    }
+  };
+
+  // Keep friends' progress fresh while the app is open.
+  useEffect(() => {
+    if (!session) return;
+    const tick = () => { if (document.visibilityState === "visible") refreshCrew(); };
+    const id = setInterval(tick, 90000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", tick); };
+  }, [session]);
 
   const handleSignIn = async () => {
     setAuthError(null);
@@ -188,7 +245,12 @@ export default function App() {
     }
   };
 
-  const handleSkip = () => { rememberSkip(true); setSkipped(true); };
+  const handleSkip = () => {
+    rememberSkip(true);
+    setSkipped(true);
+    social.clearPendingInvite();
+    setPendingInvite(null);
+  };
 
   // Signing out leaves the account's progress in the cloud and clears this
   // device, so the next person to sign in here starts clean.
@@ -200,6 +262,9 @@ export default function App() {
     navigated.current = false;
     setSkipped(false);
     setSync(null);
+    crewFor.current = null;
+    setCrew(null);
+    setCrewSheet(null);
     setData(normalize({}));
     setDayNumber(1);
     setScreen({ name: "home" });
@@ -240,23 +305,31 @@ export default function App() {
   const goHome = () => navigate({ name: "home" }, "back");
   const goWorkout = () => navigate({ name: "workout" });
 
-  // Start a challenge at Day 1 today. Whatever was active before is cleared —
-  // the badges stay.
-  const startProgram = (id) => {
+  // Leaving a challenge leaves its pact too.
+  const leavePactIfAny = () => {
+    if (!data.pactId || !userId) return;
+    social.leavePact().then(() => refreshCrew(), (err) => console.error("Leave pact failed", err));
+  };
+
+  // Start a challenge at Day 1 (today, or a pact's Day 1). Whatever was active
+  // before is cleared — the badges stay.
+  const startProgram = (id, { startDate = todayKey(), pactId = null, stay = false } = {}) => {
     setConfirm(null);
-    const next = { ...data, program: id, startDate: todayKey(), progress: {}, custom: {} };
+    if (!pactId) leavePactIfAny();
+    const next = { ...data, program: id, startDate, pactId, progress: {}, custom: {} };
     setData(next);
     save(next);
-    setDayNumber(1);
+    setDayNumber(dayFromStart(startDate));
     if (userId && next.owner === userId) {
       pushSafely(clearDays(userId).then(() => pushChallenge(userId, next)));
     }
-    navigate({ name: "workout" });
+    if (!stay) navigate({ name: "workout" });
   };
 
   const endProgram = () => {
     setConfirm(null);
-    const next = { ...data, program: null, startDate: null, progress: {}, custom: {} };
+    leavePactIfAny();
+    const next = { ...data, program: null, startDate: null, pactId: null, progress: {}, custom: {} };
     setData(next);
     save(next);
     setDayNumber(1);
@@ -339,7 +412,7 @@ export default function App() {
   const fresh = isCustom ? new Set() : newMoves(program)[dayNumber] || new Set();
 
   // Every day, summarised for the 30-day map.
-  const dayStats = daySummaries(program, data);
+  const dayStats = summarize(program, data.progress || {}, data.custom || {});
   const daysDone = dayStats.filter((d) => d.status === "complete").length;
   const allDone = Boolean(program) && daysDone === TOTAL_DAYS;
 
@@ -372,6 +445,10 @@ export default function App() {
     );
   };
 
+  const pactLine = data.pactId && crew?.pact
+    ? <p>You'll also leave your pact.</p>
+    : null;
+
   const askStart = (id) => {
     if (!program) return startProgram(id);
     const target = getProgram(id);
@@ -380,6 +457,7 @@ export default function App() {
       body: (
         <>
           <p>{lossLine()}</p>
+          {pactLine}
           <p>{target.name} starts fresh today at <strong>Day 1</strong>.</p>
         </>
       ),
@@ -395,6 +473,7 @@ export default function App() {
       body: (
         <>
           <p>{lossLine()}</p>
+          {pactLine}
           <p>You can start any challenge again, from Day 1.</p>
         </>
       ),
@@ -405,21 +484,187 @@ export default function App() {
 
   // Consecutive finished days ending at today (or at yesterday, if today is
   // still in progress).
-  const isDone = (n) => dayStats[n - 1]?.status === "complete";
-  let streak = 0;
-  for (let n = isDone(dayNumber) ? dayNumber : dayNumber - 1; n >= 1 && isDone(n); n--) streak++;
+  const streak = streakAt(dayStats, dayNumber);
 
   const blankDay = { day: dayNumber, title: `Day ${dayNumber}`, focus: "", blocks: [] };
+
+  // ── Crew actions ──
+  const meInCrew = userId ? {
+    id: userId,
+    name: crew?.me?.name || "You",
+    avatar: crew?.me?.avatar || null,
+    sharing: true,
+    challenge: data.program ? { program: data.program, startDate: data.startDate, pactId: data.pactId } : null,
+    progress: data.progress || {},
+    custom: data.custom || {},
+  } : null;
+
+  const act = async (task, success, { refresh = true } = {}) => {
+    setCrewBusy(true);
+    try {
+      const out = await task();
+      if (success) flash(success);
+      if (refresh) await refreshCrew();
+      return out;
+    } catch (err) {
+      flash(err.message || "Something went wrong");
+      return undefined;
+    } finally {
+      setCrewBusy(false);
+    }
+  };
+
+  // Joining or starting a pact replaces the current challenge; say so first
+  // when there's progress to lose.
+  const confirmReplace = (title, go) => {
+    if (!program || allDone || (daysDone === 0 && !Object.keys(data.progress || {}).length)) return go();
+    setConfirm({
+      title,
+      body: (
+        <>
+          <p>{lossLine()}</p>
+          {pactLine}
+        </>
+      ),
+      confirmLabel: "Replace it",
+      danger: true,
+      onConfirm: () => { setConfirm(null); go(); },
+    });
+  };
+
+  const handleStartPact = ({ startDate, program: pid, friends }) =>
+    confirmReplace("Start a new pact?", async () => {
+      const pactId = await act(() => social.createPact(startDate, pid, friends), null, { refresh: false });
+      if (!pactId) return;
+      setCrewSheet(null);
+      startProgram(pid, { startDate, pactId, stay: true });
+      refreshCrew();
+      flash(daysUntil(startDate) > 0 ? `Pact on. Day 1 is ${formatDay(startDate)}` : "Pact on. Day 1 is today");
+    });
+
+  const handleJoin = (pid) => {
+    const invite = crewSheet?.invite;
+    if (!invite) return;
+    confirmReplace("Join the pact?", async () => {
+      const startDate = await act(() => social.joinPact(invite.pact.id, pid), null, { refresh: false });
+      if (!startDate) return;
+      setCrewSheet(null);
+      startProgram(pid, { startDate, pactId: invite.pact.id, stay: true });
+      refreshCrew();
+      flash("You're in. 30 days together");
+    });
+  };
+
+  const handleCheer = async (person, kind) => {
+    setCrew((c) => c && { ...c, sent: new Set([...c.sent, `${person.id}|${kind}`]) });
+    try {
+      await social.sendCheer(person.id, kind);
+      flash(kind === "nudge" ? `Nudged ${person.name.split(" ")[0]}` : `Cheered ${person.name.split(" ")[0]} on`);
+    } catch (err) {
+      flash(err.message);
+      refreshCrew();
+    }
+  };
+
+  const handleShareLink = async () => {
+    const code = crew?.me?.inviteCode;
+    if (!code) return;
+    const url = social.inviteLink(code);
+    const text = "Be my accountability partner for 30 days?";
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "30 Days", text, url });
+        return;
+      }
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      flash("Invite link copied");
+    } catch {
+      window.prompt("Copy your invite link", url);
+    }
+  };
+
+  const handleResetLink = () =>
+    setConfirm({
+      title: "Make a new invite link?",
+      body: <p>Your old link stops working. People already in your crew stay.</p>,
+      confirmLabel: "New link",
+      danger: false,
+      onConfirm: () => { setConfirm(null); act(() => social.regenerateInviteCode(), "New link ready"); },
+    });
+
+  const handleRemove = (person) =>
+    setConfirm({
+      title: `Remove ${person.name}?`,
+      body: <p>You'll stop seeing each other's progress. If you're in a pact together, you both stay in it.</p>,
+      confirmLabel: "Remove",
+      danger: true,
+      onConfirm: () => { setConfirm(null); act(() => social.removeFriend(person.id), "Removed"); },
+    });
+
+  const handleSharing = (on) => {
+    setCrew((c) => c && { ...c, me: { ...c.me, sharing: on } });
+    act(() => social.setSharing(userId, on), on ? "Your crew can see your progress" : "Your progress is private");
+  };
+
+  const handleAcceptInvite = async (share) => {
+    const code = inviteDialog?.code;
+    setInviteDialog((d) => d && { ...d, busy: true });
+    try {
+      await social.acceptInvite(code, share);
+      social.clearPendingInvite();
+      setPendingInvite(null);
+      const name = inviteDialog.preview?.name?.split(" ")[0] || "They";
+      setInviteDialog(null);
+      await refreshCrew();
+      navigate({ name: "crew" });
+      flash(`${name} is in your crew`);
+    } catch (err) {
+      setInviteDialog((d) => d && { ...d, busy: false, error: err.message });
+    }
+  };
+
+  const closeInvite = () => {
+    social.clearPendingInvite();
+    setPendingInvite(null);
+    setInviteDialog(null);
+  };
+
+  const dismissCheers = () => {
+    setCrew((c) => c && { ...c, cheers: [] });
+    social.markCheersSeen().catch((err) => console.error(err));
+  };
+
+  // Once the pact's list has loaded, keep this device's challenge pointing at
+  // the right pact (e.g. it was left on another device).
+  useEffect(() => {
+    if (!crew || !data.program) return;
+    const pactId = crew.pact?.id || null;
+    const mine = crew.pact?.members.find((m) => m.id === userId);
+    const matches = pactId && mine?.program === data.program;
+    const next = matches ? pactId : null;
+    if ((data.pactId || null) !== next) {
+      const updated = { ...data, pactId: next };
+      setData(updated);
+      save(updated);
+      if (userId && updated.owner === userId) pushSafely(pushChallenge(userId, updated));
+    }
+  }, [crew]);
 
   // Hold the first paint until we know whether someone is signed in, so the
   // sign-in screen doesn't flash for people who already are.
   if (!authReady) return <div className="app" />;
 
   // No point asking people to sign in while Google isn't switched on.
-  if (!session && !skipped && googleOn !== false) {
+  // An invite link asks for an account even if this device skipped before.
+  if (!session && (!skipped || pendingInvite) && googleOn !== false) {
     return (
       <div className="app">
         <SignInScreen
+          invited={Boolean(pendingInvite)}
           googleOn={googleOn}
           busy={signingIn}
           error={authError}
@@ -464,12 +709,84 @@ export default function App() {
           onClose={() => setFinished(null)}
         />
       )}
+      {inviteDialog && (
+        <AcceptInviteDialog
+          preview={inviteDialog.preview}
+          error={inviteDialog.error}
+          busy={inviteDialog.busy}
+          onAccept={handleAcceptInvite}
+          onClose={closeInvite}
+        />
+      )}
+      {crew && crewSheet?.name === "start" && (
+        <StartPactSheet
+          crew={crew}
+          currentProgram={data.program}
+          busy={crewBusy}
+          onStart={handleStartPact}
+          onClose={() => setCrewSheet(null)}
+        />
+      )}
+      {crew && meInCrew && crewSheet?.name === "join" && (
+        <JoinPactSheet
+          invite={crewSheet.invite}
+          crew={crew}
+          me={meInCrew}
+          busy={crewBusy}
+          onJoin={handleJoin}
+          onClose={() => setCrewSheet(null)}
+        />
+      )}
+      {crew?.pact && crewSheet?.name === "more" && (
+        <InviteMoreSheet
+          crew={crew}
+          busy={crewBusy}
+          onInvite={(ids) => act(() => social.inviteToPact(ids), "Invites sent").then(() => setCrewSheet(null))}
+          onShareLink={handleShareLink}
+          onClose={() => setCrewSheet(null)}
+        />
+      )}
+      {toast && <div className="toast" key={toast.id} role="status">{toast.text}</div>}
     </>
   );
 
   const previewing = screen.name === "preview" ? getProgram(screen.id) : null;
-  const screenKey = previewing ? `preview-${previewing.id}` : program && screen.name === "workout" ? "workout" : "home";
+  const screenKey = previewing ? `preview-${previewing.id}`
+    : screen.name === "crew" ? "crew"
+    : program && screen.name === "workout" ? "workout" : "home";
   const enter = canTransition ? "" : " screen-in";
+  const goCrew = () => navigate({ name: "crew" });
+
+  if (screen.name === "crew") {
+    return (
+      <div className="app" key={screenKey} style={themeVars(program)}>
+        <div className={`screen${enter}`}>
+          <CrewScreen
+            crew={crew}
+            me={meInCrew}
+            signedIn={Boolean(session)}
+            googleOn={googleOn}
+            loading={crewLoading}
+            error={crewError}
+            onBack={() => navigate(program ? { name: "workout" } : { name: "home" }, "back")}
+            onSignIn={handleSignIn}
+            onRetry={() => refreshCrew()}
+            onSharing={handleSharing}
+            onShareLink={handleShareLink}
+            onResetLink={handleResetLink}
+            onCheer={handleCheer}
+            onRemove={handleRemove}
+            onStartPact={() => setCrewSheet({ name: "start" })}
+            onJoin={(invite) => setCrewSheet({ name: "join", invite })}
+            onDecline={(invite) => act(() => social.declinePact(invite.pact.id), "Invite declined")}
+            onInviteMore={() => setCrewSheet({ name: "more" })}
+            onDismissCheers={dismissCheers}
+          />
+        </div>
+        {overlays}
+      </div>
+    );
+  }
 
   if (previewing) {
     return (
@@ -503,6 +820,7 @@ export default function App() {
             completions={data.completions || []}
             onOpen={openProgram}
             onContinue={goWorkout}
+            crewCard={<CrewHomeCard crew={crew} me={meInCrew} signedIn={Boolean(session)} onOpen={goCrew} />}
             footer={<div className="home-foot">{accountBar}</div>}
           />
         </div>
@@ -565,8 +883,18 @@ export default function App() {
           </div>
         )}
         {streak > 1 && <p className="streak-line">🔥 {streak} days in a row</p>}
+        {data.pactId && daysUntil(data.startDate) > 0 && (
+          <p className="streak-line">Your pact's Day 1 is {formatDay(data.startDate)}. Get a head start if you like.</p>
+        )}
+        {session && <CrewPeek crew={crew} me={meInCrew} onOpen={goCrew} />}
         {accountBar}
       </header>
+
+      {crew && (
+        <div className="cheer-slot">
+          <CheerBanner cheers={crew.cheers} people={crew.people} onOpen={() => { dismissCheers(); goCrew(); }} onDismiss={dismissCheers} />
+        </div>
+      )}
 
       {total === 0 && (
         <p className="empty">

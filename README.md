@@ -66,6 +66,39 @@ public, and row-level security is what protects the data. Set `VITE_SUPABASE_URL
 
 Until Google is enabled, the app skips the sign-in screen and works offline as before.
 
+## Crew & pacts
+
+Train with friends. Everything here needs a Google account.
+
+- **Accountability partners.** Everyone has a personal invite link (Crew → **Share invite
+  link**). A friend who opens it and taps **Accept** joins your crew, and you join theirs.
+  **New link** retires the old one, and people already in your crew stay.
+- **Sharing is a switch.** Your crew sees your name either way. They see your challenge,
+  day, ticks and streak only while **Share my progress** is on. It's off by default. The
+  invite dialog offers to turn it on, and starting or joining a pact turns it on.
+- **Crew cards** show each partner's challenge, "Day 12 · 9/30 done · 🔥 4", whether
+  they've trained today, and a 30-day strip in their challenge's colours.
+- **Cheer and nudge.** 👏 **Cheer** anyone in your crew once a day. ⏰ **Nudge** appears
+  when they haven't finished today yet. They see it as a banner on their workout screen.
+- **30 days together (pacts).** **Start a pact** picks a shared Day 1 (today, tomorrow or
+  next Monday) and your challenge, and invites people from your crew. Each person picks
+  **their own challenge**, the same one or a different one. The shared thing is the 30 days.
+  - Joining or starting a pact replaces your current challenge (you're asked first if
+    there's progress to lose). Day 1 is the pact's date for everyone.
+  - People can join until 3 days after Day 1. Anyone who accepts your invite link while
+    your pact is open gets invited to it automatically.
+  - One challenge and one pact at a time. Switching or ending your challenge leaves the
+    pact, and the others see "Left the pact".
+  - The workout screen shows "Pact · 2 of 3 trained today". Tap it for the Crew screen.
+
+Under the hood (`supabase/migrations/20260930120000_crew_and_pacts.sql`): `profiles`,
+`friendships`, `pacts`, `pact_members`, `pact_invites` and `cheers`, plus `challenges.pact_id`.
+Friends can read each other's `challenges` / `day_progress` rows only while the owner's
+sharing is on. Every write that involves someone else (accepting an invite, starting or
+joining a pact, cheering) goes through a `security definer` function that checks the
+relationship first. The relationship checks themselves live in a `private` schema that the
+API doesn't expose (`20260930130000_crew_private_helpers.sql`).
+
 ## Music
 
 Each exercise can carry an optional `song`:
@@ -224,6 +257,8 @@ into the file so it's shared across devices and doesn't live only in one browser
 | `plan-marathon.js` | Marathon Final 30: the last month before a marathon |
 | `App.jsx` | Screens and navigation, today's workout, progress, rest timer, switching |
 | `HoldTimer.jsx` | Full-screen countdown for timed moves |
+| `Crew.jsx` | Crew screen, pact start/join sheets, invite dialog, cheer banner, crew strip |
+| `social.js` | Crew & pact data: invite links, loading friends' progress, pact and cheer actions |
 | `timer.js` | Reads timed reps into timer phases; beeps and vibration |
 | `Catalog.jsx` | Home/catalog, program preview, day preview, badges, dialogs |
 | `Builder.jsx` | The day builder + `Copy JSON` export |
