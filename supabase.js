@@ -43,10 +43,10 @@ export function signOut() {
 // ─── Progress sync ───────────────────────────────────────────────────────────
 //
 // Local shape:
-//   { owner, program, startDate, progress: { [day]: { "bi:ei": true } },
+//   { owner, program, startDate, pactId, progress: { [day]: { "bi:ei": true } },
 //     custom: { [day]: workout }, completions: [{ program, startDate, finishedAt }] }
 // Tables:
-//   challenges    (user_id, program, start_date, completions)
+//   challenges    (user_id, program, start_date, pact_id, completions)
 //   day_progress  (user_id, day, done, custom) — always for the active program
 
 // Before the catalog there was only one program; progress with no program
@@ -62,13 +62,14 @@ export function normalize(data) {
     ...data,
     program,
     startDate: program ? data.startDate || null : null,
+    pactId: program ? data.pactId || null : null,
     completions: data.completions || [],
   };
 }
 
 export async function pullRemote(userId) {
   const [challenge, days] = await Promise.all([
-    supabase.from("challenges").select("start_date, program, completions").eq("user_id", userId).maybeSingle(),
+    supabase.from("challenges").select("start_date, program, pact_id, completions").eq("user_id", userId).maybeSingle(),
     supabase.from("day_progress").select("day, done, custom").eq("user_id", userId),
   ]);
   if (challenge.error) throw challenge.error;
@@ -85,6 +86,7 @@ export async function pullRemote(userId) {
   return {
     program,
     startDate: program ? challenge.data?.start_date || null : null,
+    pactId: program ? challenge.data?.pact_id || null : null,
     progress,
     custom,
     completions: challenge.data?.completions || [],
@@ -121,25 +123,29 @@ export function mergeProgress(local, remote, userId) {
   else pick = (base.startDate || "") > (remote.startDate || "") ? "local" : "remote";
 
   if (pick === "remote") {
-    const { program, startDate, progress, custom } = remote;
-    return { merged: { owner: userId, program, startDate, progress, custom, completions }, wipe: false };
+    const { program, startDate, pactId, progress, custom } = remote;
+    return { merged: { owner: userId, program, startDate, pactId, progress, custom, completions }, wipe: false };
   }
   if (pick === "local") {
-    const { program, startDate, progress = {}, custom = {} } = base;
+    const { program, startDate, pactId = null, progress = {}, custom = {} } = base;
     return {
-      merged: { owner: userId, program, startDate, progress, custom, completions },
+      merged: { owner: userId, program, startDate, pactId, progress, custom, completions },
       wipe: Boolean(remote.program),
     };
   }
 
-  const startDate = [base.startDate, remote.startDate].filter(Boolean).sort()[0] || null;
+  // A pact fixes Day 1, so its date wins over "earliest".
+  const pactId = remote.pactId || base.pactId || null;
+  const startDate = pactId && remote.pactId
+    ? remote.startDate
+    : [base.startDate, remote.startDate].filter(Boolean).sort()[0] || null;
   const progress = { ...(base.progress || {}) };
   for (const [day, done] of Object.entries(remote.progress)) {
     progress[day] = anon ? { ...(progress[day] || {}), ...done } : done;
   }
   const custom = { ...(base.custom || {}), ...remote.custom };
   return {
-    merged: { owner: userId, program: base.program, startDate, progress, custom, completions },
+    merged: { owner: userId, program: base.program, startDate, pactId, progress, custom, completions },
     wipe: false,
   };
 }
@@ -155,7 +161,12 @@ function dayRow(userId, data, day) {
 
 // The challenge row: which program, when it started, and the badges earned.
 export async function pushChallenge(userId, data) {
-  const row = { user_id: userId, program: data.program || null, completions: data.completions || [] };
+  const row = {
+    user_id: userId,
+    program: data.program || null,
+    pact_id: data.pactId || null,
+    completions: data.completions || [],
+  };
   if (data.startDate) row.start_date = data.startDate;
   const { error } = await supabase.from("challenges").upsert(row, { onConflict: "user_id" });
   if (error) throw error;

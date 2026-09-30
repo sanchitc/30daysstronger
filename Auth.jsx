@@ -20,14 +20,16 @@ function GoogleButton({ googleOn, onClick, busy }) {
   );
 }
 
-export function SignInScreen({ googleOn, busy, error, onGoogle, onSkip }) {
+export function SignInScreen({ googleOn, busy, error, onGoogle, onSkip, invited = false }) {
   return (
     <div className="signin">
       <div className="signin-top">
         <p className="signin-kicker">30 DAYS</p>
         <h1 className="signin-title">STRONGER</h1>
         <p className="signin-sub">
-          Sign in to keep your progress safe and pick up on any device.
+          {invited
+            ? "You've been invited to be someone's accountability partner. Sign in to accept and see each other's progress."
+            : "Sign in to keep your progress safe and pick up on any device."}
         </p>
       </div>
 
@@ -40,7 +42,9 @@ export function SignInScreen({ googleOn, busy, error, onGoogle, onSkip }) {
         <button className="ghost-btn" onClick={onSkip}>
           Continue without an account
         </button>
-        <p className="signin-fine">Without an account, progress stays on this device only.</p>
+        <p className="signin-fine">
+          {invited ? "Invites need an account." : "Without an account, progress stays on this device only."}
+        </p>
       </div>
     </div>
   );

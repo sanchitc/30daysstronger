@@ -4,7 +4,7 @@
 // be previewed day by day. To add a challenge, write its 30 days (same shape as
 // plan.js) and add an entry here.
 
-import { PLAN as STRONGER_DAYS, TOTAL_DAYS } from "./plan.js";
+import { PLAN as STRONGER_DAYS, TOTAL_DAYS, countExercises, countDone } from "./plan.js";
 import AGELESS_DAYS from "./plan-ageless.js";
 import MARATHON_DAYS from "./plan-marathon.js";
 
@@ -108,6 +108,47 @@ export function newMoves(program) {
   }
   newCache.set(program.id, out);
   return out;
+}
+
+// ─── Progress maths ──────────────────────────────────────────────────────────
+// Shared by your own workout screen and your crew's cards, so a friend's
+// "Day 12 · 9 done" is worked out exactly the way yours is.
+
+export function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Days from today to a date (negative once it's passed).
+export function daysUntil(date) {
+  return Math.round((new Date(date) - new Date(todayKey())) / 86400000);
+}
+
+// Day 1 is the start date; it never runs past the plan.
+export function dayFromStart(startDate) {
+  const diff = Math.floor((new Date(todayKey()) - new Date(startDate)) / 86400000) + 1;
+  return Math.min(Math.max(diff, 1), TOTAL_DAYS);
+}
+
+// Every day of a run, with how much of it is ticked.
+export function summarize(program, progress = {}, custom = {}) {
+  if (!program) return [];
+  return program.days.map((planDay) => {
+    const n = planDay.day;
+    const w = custom[n] || planDay;
+    const t = countExercises(w);
+    const d = countDone(w, progress[n]);
+    const status = t === 0 ? "empty" : d >= t ? "complete" : d > 0 ? "started" : "ready";
+    return { day: n, total: t, done: d, status };
+  });
+}
+
+// Consecutive finished days ending at `day` (or the day before, if `day` is
+// still in progress).
+export function streakAt(stats, day) {
+  const isDone = (n) => stats[n - 1]?.status === "complete";
+  let streak = 0;
+  for (let n = isDone(day) ? day : day - 1; n >= 1 && isDone(n); n--) streak++;
+  return streak;
 }
 
 // Rank shown next to the badge count.

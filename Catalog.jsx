@@ -146,7 +146,7 @@ function ProgramCard({ program, onOpen }) {
   );
 }
 
-export function HomeScreen({ active, dayNumber, daysDone, completions, onOpen, onContinue, footer }) {
+export function HomeScreen({ active, dayNumber, daysDone, completions, onOpen, onContinue, crewCard, footer }) {
   const done = daysDone >= TOTAL_DAYS;
   const others = PROGRAMS.filter((p) => p.id !== active?.id);
   return (
@@ -186,6 +186,8 @@ export function HomeScreen({ active, dayNumber, daysDone, completions, onOpen, o
           <button className="active-link" onClick={() => onOpen(active.id)}>View the full plan</button>
         </section>
       )}
+
+      {crewCard}
 
       <TrophyShelf completions={completions} />
 
