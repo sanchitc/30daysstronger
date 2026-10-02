@@ -46,7 +46,15 @@ const slim = (t) => ({
   image: t.album?.images?.at(-1)?.url || null,
 });
 
+// The iOS app calls this from capacitor://localhost, which is cross-origin.
+const NATIVE_ORIGINS = new Set(["capacitor://localhost", "ionic://localhost"]);
+
 export default async function handler(req, res) {
+  const origin = req.headers.origin;
+  if (NATIVE_ORIGINS.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
   const market = process.env.SPOTIFY_MARKET || "US";
   const { q, uri } = req.query;
   try {

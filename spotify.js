@@ -6,6 +6,8 @@
 // everyone else a 30-second preview. Search goes through /api/spotify-search
 // (a Vercel function holding the app's client secret).
 
+import { API_BASE } from "./platform.js";
+
 const TRACK_ID = /^[A-Za-z0-9]{22}$/;
 
 // Accepts "spotify:track:ID", "https://open.spotify.com/track/ID?si=…" (also
@@ -41,7 +43,7 @@ export function trackUrl(uri) {
 // ── Search (server side, see api/spotify-search.js) ──
 
 export async function searchTracks(q, signal) {
-  const res = await fetch(`/api/spotify-search?q=${encodeURIComponent(q)}`, { signal });
+  const res = await fetch(`${API_BASE}/api/spotify-search?q=${encodeURIComponent(q)}`, { signal });
   if (!res.ok) throw new Error(`search ${res.status}`);
   const body = await res.json();
   return body.tracks || [];
@@ -53,7 +55,7 @@ export function fetchTrackTitle(uri) {
   if (metaCache.has(uri)) return metaCache.get(uri);
   const p = (async () => {
     try {
-      const res = await fetch(`/api/spotify-search?uri=${encodeURIComponent(uri)}`);
+      const res = await fetch(`${API_BASE}/api/spotify-search?uri=${encodeURIComponent(uri)}`);
       if (res.ok) {
         const t = (await res.json()).track;
         if (t) return `${t.name} — ${t.artists}`;

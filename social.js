@@ -16,13 +16,15 @@
 // Row-level security decides what comes back; this file only asks.
 
 import { supabase } from "./supabase.js";
+import { isNative, WEB_URL } from "./platform.js";
 
 const INVITE_KEY = "training_tracker_pending_invite";
 
 // ── Invite links ────────────────────────────────────────────────────────────
 
 export function inviteLink(code) {
-  return `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(code)}`;
+  const base = isNative ? `${WEB_URL}/` : `${window.location.origin}${window.location.pathname}`;
+  return `${base}?invite=${encodeURIComponent(code)}`;
 }
 
 // An invite in the address bar is kept until it's dealt with, so it survives

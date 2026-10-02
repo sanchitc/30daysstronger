@@ -1,0 +1,6 @@
+{
+  "appId": "com.thirtydaysstronger.app",
+  "appName": "30 Days Stronger",
+  "webDir": "dist",
+  "ios": { "contentInset": "never", "backgroundColor": "#0a0a0f" }
+}

@@ -293,3 +293,24 @@ Or connect the repo at vercel.com → Import Project.
 ## Credits
 
 Exercise data and images: [yuhonas/free-exercise-db](https://github.com/yuhonas/free-exercise-db) (Unlicense / public domain).
+
+## iOS app (Capacitor)
+
+The web build is wrapped in a native shell with [Capacitor](https://capacitorjs.com). Needs a Mac with Xcode.
+
+```bash
+npm install
+npm run build
+npx cap add ios        # first time only
+npx cap sync ios
+npx cap run ios        # or: npx cap open ios, then ▶ in Xcode
+```
+
+After web changes: `npm run build && npx cap sync ios`.
+
+One-time setup:
+
+1. In Supabase → Authentication → URL Configuration, add `com.thirtydaysstronger.app://login` to the redirect URLs.
+2. In `ios/App/App/Info.plist`, register the URL scheme `com.thirtydaysstronger.app` (Xcode → App target → Info → URL Types).
+
+Native-only behaviour lives behind `isNative` in `platform.js`; the web app is unchanged. In the shell, `/api/*` calls go to `VITE_WEB_URL` (default `https://30daysstronger.vercel.app`), Google sign-in uses the system browser and returns through the URL scheme, and invite links point at the public web URL.

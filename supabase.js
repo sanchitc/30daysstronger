@@ -6,6 +6,7 @@
 // VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY.
 
 import { createClient } from "@supabase/supabase-js";
+import { isNative, NATIVE_AUTH_REDIRECT } from "./platform.js";
 
 export const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL || "https://timoqfdzinioppmgxefz.supabase.co";
@@ -29,10 +30,38 @@ export async function googleEnabled() {
   }
 }
 
-export function signInWithGoogle() {
-  return supabase.auth.signInWithOAuth({
+export async function signInWithGoogle() {
+  if (!isNative) {
+    return supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
+    });
+  }
+  // Google refuses embedded webviews, so sign in through the system browser
+  // sheet and come back via the custom URL scheme (see initNativeAuth).
+  const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: window.location.origin },
+    options: { redirectTo: NATIVE_AUTH_REDIRECT, skipBrowserRedirect: true },
+  });
+  if (error || !data?.url) return { data, error };
+  const { Browser } = await import("@capacitor/browser");
+  await Browser.open({ url: data.url });
+  return { data, error: null };
+}
+
+// Native only: finish the PKCE sign-in when the browser hands control back
+// through com.thirtydaysstronger.app://login?code=… Call once at startup.
+export async function initNativeAuth() {
+  if (!isNative) return;
+  const [{ App }, { Browser }] = await Promise.all([import("@capacitor/app"), import("@capacitor/browser")]);
+  App.addListener("appUrlOpen", async ({ url }) => {
+    if (!url?.startsWith(NATIVE_AUTH_REDIRECT)) return;
+    const code = new URL(url).searchParams.get("code");
+    try {
+      if (code) await supabase.auth.exchangeCodeForSession(code);
+    } finally {
+      Browser.close().catch(() => {});
+    }
   });
 }
 
